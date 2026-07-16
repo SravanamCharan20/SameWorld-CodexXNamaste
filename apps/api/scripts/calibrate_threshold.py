@@ -17,8 +17,10 @@ from app.db.mongo import get_db
 from app.db.qdrant import get_qdrant_client
 from app.config import get_settings
 from app.services.ranking import score_candidate
-from scripts.seed_demo_corpus import ROWS
+from scripts.seed_demo_corpus import ROWS as ROWS_PHASE4
+from scripts.seed_full_corpus import ROWS as ROWS_PHASE5
 
+ROWS = ROWS_PHASE4 + ROWS_PHASE5
 random.seed(42)
 
 
@@ -79,8 +81,8 @@ async def main():
 
     random.shuffle(same_theme_pairs)
     random.shuffle(cross_theme_pairs)
-    similar_sample = same_theme_pairs[:30]
-    dissimilar_sample = cross_theme_pairs[:30]
+    similar_sample = same_theme_pairs[:60]
+    dissimilar_sample = cross_theme_pairs[:60]
 
     # Score both directions (A as query against B, and B as query against A) since the
     # formula isn't symmetric (recency/kind live on the candidate side).

@@ -22,9 +22,10 @@ class Settings(BaseSettings):
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
     embedding_dim: int = 384
 
-    # Calibrated per §5 against the combined score (similarity + boosts), not raw
-    # cosine similarity — see scripts/calibrate_threshold.py. Re-run in Phase 5.
-    similarity_threshold: float = 0.51
+    # Re-calibrated per §5 against the combined score (similarity + boosts), full
+    # 140-signal corpus — see scripts/calibrate_threshold.py and .env for the note
+    # on why 0.45, not the naive dissimilar-max formula output.
+    similarity_threshold: float = 0.45
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
