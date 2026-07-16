@@ -111,10 +111,10 @@ export default function MePage() {
           </div>
           <div className="flex items-center gap-4">
             <a
-              href="/search"
+              href="/explore"
               className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
             >
-              search
+              explore
             </a>
             <button
               onClick={logout}

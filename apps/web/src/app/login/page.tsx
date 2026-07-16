@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [personas, setPersonas] = useState<Persona[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loggingIn, setLoggingIn] = useState<string | null>(null);
+  const [filter, setFilter] = useState("");
 
   useEffect(() => {
     apiFetch<Persona[]>("/personas").then((res) => {
@@ -26,7 +27,7 @@ export default function LoginPage() {
     });
     if (res.data) {
       storePersona(res.data);
-      router.push("/me");
+      router.push("/explore");
     } else {
       setError(res.error ?? "Login failed");
       setLoggingIn(null);
@@ -50,11 +51,27 @@ export default function LoginPage() {
           <p className="mb-4 text-sm text-red-400 font-mono text-center">{error}</p>
         )}
 
-        <div className="rounded-card border border-border bg-surface divide-y divide-border">
+        {personas && personas.length > 8 && (
+          <input
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            placeholder="Filter by name or region…"
+            className="w-full mb-3 bg-surface border border-border rounded-pill px-4 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
+          />
+        )}
+
+        <div className="rounded-card border border-border bg-surface divide-y divide-border max-h-[60vh] overflow-y-auto">
           {personas === null && (
             <p className="p-6 text-sm text-text-secondary font-mono">Loading personas…</p>
           )}
-          {personas?.map((p) => (
+          {personas
+            ?.filter(
+              (p) =>
+                !filter ||
+                p.display_name.toLowerCase().includes(filter.toLowerCase()) ||
+                p.region_label.toLowerCase().includes(filter.toLowerCase())
+            )
+            .map((p) => (
             <button
               key={p.id}
               onClick={() => login(p.id)}

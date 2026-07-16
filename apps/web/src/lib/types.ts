@@ -67,3 +67,23 @@ export type SearchResponse = {
   message: string | null;
   results: SearchResult[];
 };
+
+export type GlobePoint = {
+  id: string;
+  lat: number;
+  lng: number;
+  region_label: string;
+  kind: SignalKind;
+  topic: string;
+  is_profile: boolean;
+};
+
+export type ActivityItem = {
+  id: string;
+  owner_id: string;
+  raw_text: string;
+  region_label: string;
+  kind: SignalKind;
+  status: SignalStatus;
+  created_at: string | null;
+};
