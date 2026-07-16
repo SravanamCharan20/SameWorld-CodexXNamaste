@@ -3,14 +3,46 @@ from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 from app.db.mongo import get_db
 from app.deps import get_current_persona_id
 from app.envelope import ok
 from app.models.connection import ConnectionAction, ConnectionCreate, serialize_connection
+from app.services.icebreaker import generate_icebreakers
 from app.services.rate_limit import enforce_rate_limit
 
 router = APIRouter()
+
+
+class IcebreakerRequest(BaseModel):
+    signal_id: str
+
+
+# Suggests opening lines for the connect textarea — "reach out" too often
+# stalls on a blank box, so this gives something concrete to start from (and
+# edit or ignore). Degrades to ok(None) on any failure so the connect flow
+# itself never depends on it working.
+@router.post("/connections/icebreaker")
+async def icebreaker(body: IcebreakerRequest, persona_id: str = Depends(get_current_persona_id)):
+    db = get_db()
+    try:
+        signal = await db.signals.find_one({"_id": ObjectId(body.signal_id)})
+    except Exception:
+        return ok(None)
+    if not signal:
+        return ok(None)
+
+    sender = await db.personas.find_one({"_id": persona_id})
+    sender_name = sender["display_name"] if sender else "Someone"
+
+    try:
+        suggestions = await generate_icebreakers(signal["raw_text"], sender_name)
+    except Exception:
+        return ok(None)
+    if not suggestions:
+        return ok(None)
+    return ok({"suggestions": suggestions})
 
 
 @router.post("/connections")

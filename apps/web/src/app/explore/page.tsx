@@ -3,12 +3,21 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, X, MapPinned, SearchX } from "lucide-react";
+import { Search, X, MapPinned, SearchX, Sparkles, Radio, Zap } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
-import { GlobePoint, SearchResponse, SearchResult } from "@/lib/types";
+import {
+  GlobePoint,
+  NarrateResponse,
+  PulseResponse,
+  ResonanceResponse,
+  SearchResponse,
+  SearchResult,
+} from "@/lib/types";
 import ConnectButton from "@/components/ConnectButton";
 import AppHeader from "@/components/AppHeader";
+import Avatar from "@/components/Avatar";
+import { PersonaInfo, usePersonaNames } from "@/lib/usePersonaNames";
 
 const GlobeCanvas = dynamic(() => import("@/components/GlobeCanvas"), {
   ssr: false,
@@ -42,6 +51,8 @@ export default function ExplorePage() {
   const [hasSearched, setHasSearched] = useState(false);
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [narrating, setNarrating] = useState(false);
+  const [narrateResult, setNarrateResult] = useState<NarrateResponse | null>(null);
 
   const [browseOpen, setBrowseOpen] = useState(false);
   const [browseRegion, setBrowseRegion] = useState("");
@@ -49,6 +60,10 @@ export default function ExplorePage() {
   const [browseError, setBrowseError] = useState<string | null>(null);
 
   const [selectedPoint, setSelectedPoint] = useState<{ point: GlobePoint; x: number; y: number } | null>(null);
+
+  const [pulse, setPulse] = useState<PulseResponse | null>(null);
+  const [resonance, setResonance] = useState<ResonanceResponse | null>(null);
+  const [resonanceDismissed, setResonanceDismissed] = useState(false);
 
   useEffect(() => {
     const stored = getStoredPersona();
@@ -68,6 +83,46 @@ export default function ExplorePage() {
     const interval = setInterval(loadGlobe, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // World Pulse — a single live headline for the whole globe, cached and
+  // shared server-side so every viewer sees the same read at once.
+  useEffect(() => {
+    async function loadPulse() {
+      const res = await apiFetch<PulseResponse | null>("/pulse");
+      if (res.data) setPulse(res.data);
+    }
+    loadPulse();
+    const interval = setInterval(loadPulse, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Resonance — an AI-found striking match between two unrelated people's
+  // signals, drawn as its own gold arc independent of any search.
+  useEffect(() => {
+    async function loadResonance() {
+      const res = await apiFetch<ResonanceResponse | null>("/resonance");
+      if (res.data) {
+        setResonance((prev) => {
+          const isNew = !prev || prev.a.signal_id !== res.data!.a.signal_id || prev.b.signal_id !== res.data!.b.signal_id;
+          if (isNew) setResonanceDismissed(false);
+          return res.data;
+        });
+      }
+    }
+    loadResonance();
+    const interval = setInterval(loadResonance, 300000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const resonanceArc = useMemo(() => {
+    if (!resonance || resonanceDismissed) return null;
+    return {
+      startLat: resonance.a.lat,
+      startLng: resonance.a.lng,
+      endLat: resonance.b.lat,
+      endLng: resonance.b.lng,
+    };
+  }, [resonance, resonanceDismissed]);
 
   const highlightedIds = useMemo(() => {
     if (!searchResponse || searchResponse.empty) return new Set<string>();
@@ -91,14 +146,35 @@ export default function ExplorePage() {
     setSearchError(null);
     setBrowseOpen(false);
     setSelectedPoint(null);
+    setNarrateResult(null);
     const res = await apiFetch<SearchResponse>("/search", {
       method: "POST",
       body: JSON.stringify({ query_text: text }),
     });
-    if (res.data) setSearchResponse(res.data);
-    else setSearchError(res.error ?? "Search failed — try again.");
+    if (res.data) {
+      setSearchResponse(res.data);
+      // "Ask the World" — fired after the result list is already in hand, so
+      // the (slower) AI narrative never blocks or risks the actual results;
+      // it just fills in a card above them a moment later, or silently
+      // doesn't if Groq is unavailable.
+      if (!res.data.empty && res.data.results.length > 0) {
+        askTheWorld(text, res.data.results.slice(0, 4).map((r) => r.signal_id));
+      }
+    } else {
+      setSearchError(res.error ?? "Search failed — try again.");
+    }
     setHasSearched(true);
     setSearching(false);
+  }
+
+  async function askTheWorld(text: string, signalIds: string[]) {
+    setNarrating(true);
+    const res = await apiFetch<NarrateResponse | null>("/search/narrate", {
+      method: "POST",
+      body: JSON.stringify({ query_text: text, signal_ids: signalIds }),
+    });
+    if (res.data) setNarrateResult(res.data);
+    setNarrating(false);
   }
 
   // The header's "?" help panel links to example searches via ?q=... — this
@@ -119,6 +195,8 @@ export default function ExplorePage() {
     setSearchResponse(null);
     setSearchError(null);
     setHasSearched(false);
+    setNarrateResult(null);
+    setNarrating(false);
   }
 
   // Browse Nearby defaults to the viewer's own region on first open — an
@@ -183,6 +261,15 @@ export default function ExplorePage() {
     runBrowse(regionLabel);
   }
 
+  // The results panel used to force a click-through to "view profile" just
+  // to see whose signal you were looking at — this fetches names up front so
+  // every card/popup can show them in place.
+  const people = usePersonaNames([
+    ...(searchResponse?.results.map((r) => r.owner_id) ?? []),
+    ...(browseResults?.map((r) => r.owner_id) ?? []),
+    selectedPoint?.point.owner_id,
+  ]);
+
   if (!persona) return null;
 
   const resultsPanelOpen = hasSearched || browseOpen;
@@ -197,12 +284,63 @@ export default function ExplorePage() {
           focusTarget={focusTarget}
           origin={{ lat: persona.region_lat, lng: persona.region_lng }}
           ownPersonaId={persona.id}
+          resonanceArc={resonanceArc}
           onPointClick={handlePointClick}
           onClusterClick={handleClusterClick}
         />
       </div>
 
       <AppHeader persona={persona} active="explore" />
+
+      {/* World Pulse — one live headline generated from a sample of what's
+          actually happening across the globe right now, shared by everyone
+          viewing at once. */}
+      {pulse && !resultsPanelOpen && (
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-10 w-[92%] max-w-xl px-4">
+          <div className="flex items-center gap-2.5 bg-surface/85 backdrop-blur-xl border border-ai-match/25 rounded-pill px-4 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
+            <Radio size={13} className="text-ai-match shrink-0 animate-pulse" />
+            <span className="text-[10px] font-mono font-semibold text-ai-match uppercase tracking-wide shrink-0">
+              World Pulse
+            </span>
+            <span className="text-xs text-text-primary truncate">{pulse.headline}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Resonance — an AI-found striking match between two unrelated
+          people's signals on opposite sides of the world, shown as its own
+          gold arc on the globe regardless of any active search. */}
+      {resonance && !resonanceDismissed && (
+        <div className="fixed bottom-24 left-4 sm:left-6 z-10 w-[calc(100%-2rem)] sm:w-80">
+          <div className="card-base !border-open/30 bg-gradient-to-br from-open/[0.08] to-transparent p-4 relative">
+            <button
+              onClick={() => setResonanceDismissed(true)}
+              aria-label="Dismiss resonance"
+              className="absolute top-2.5 right-2.5 h-5 w-5 rounded-full flex items-center justify-center text-text-secondary cursor-pointer hover:text-text-primary hover:bg-white/[0.07] transition-colors duration-micro"
+            >
+              <X size={12} />
+            </button>
+            <div className="flex items-center gap-1.5 mb-2.5">
+              <Zap size={13} className="text-open" />
+              <span className="text-[10px] font-mono font-semibold text-open uppercase tracking-wide">
+                Resonance
+              </span>
+            </div>
+            <p className="text-xs text-text-secondary mb-2">
+              <span className="text-text-primary font-medium">{resonance.a.display_name}</span>
+              <span className="mx-1">·</span>
+              {resonance.a.region_label}
+              <span className="mx-1.5 text-open">⟷</span>
+              <span className="text-text-primary font-medium">{resonance.b.display_name}</span>
+              <span className="mx-1">·</span>
+              {resonance.b.region_label}
+            </p>
+            {resonance.note && (
+              <p className="text-sm text-text-primary leading-relaxed">{resonance.note}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Page label + legend */}
       {!resultsPanelOpen && (
@@ -221,6 +359,7 @@ export default function ExplorePage() {
       {selectedPoint && (
         <PointPopup
           point={selectedPoint.point}
+          person={people[selectedPoint.point.owner_id]}
           x={selectedPoint.x}
           y={selectedPoint.y}
           onClose={() => setSelectedPoint(null)}
@@ -275,10 +414,10 @@ export default function ExplorePage() {
 
       {/* Slide-in results panel */}
       {resultsPanelOpen && (
-        <div className="fixed top-0 right-0 bottom-0 z-20 w-full sm:w-96 bg-surface/95 backdrop-blur border-l border-border overflow-y-auto transition-transform duration-panel ease-out-expo">
-          <div className="p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h2 className="text-sm font-medium text-text-primary">
+        <div className="fixed top-24 left-4 right-4 bottom-6 sm:left-auto sm:right-6 sm:w-[26rem] z-20 bg-surface/95 backdrop-blur-xl border border-border/50 rounded-card shadow-[0_20px_60px_rgba(0,0,0,0.5)] overflow-y-auto transition-transform duration-panel ease-out-expo">
+          <div className="px-7 py-8">
+            <div className="flex items-start justify-between gap-4 mb-2">
+              <h2 className="text-xl font-heading font-bold text-text-primary tracking-tight">
                 {browseOpen ? "Browse Nearby" : "Search Results"}
               </h2>
               <button
@@ -286,13 +425,13 @@ export default function ExplorePage() {
                   clearSearch();
                   setBrowseOpen(false);
                 }}
-                className="link-muted flex items-center gap-1"
+                aria-label="Close"
+                className="h-7 w-7 shrink-0 rounded-full flex items-center justify-center text-text-secondary cursor-pointer hover:text-text-primary hover:bg-white/[0.07] transition-colors duration-micro"
               >
-                <X size={13} />
-                close
+                <X size={15} />
               </button>
             </div>
-            <p className="text-xs text-text-secondary mb-4">
+            <p className="text-sm text-text-secondary mb-7 leading-relaxed">
               {browseOpen
                 ? "Signals from a specific place, not filtered by relevance."
                 : searchResponse && !searchResponse.empty
@@ -300,8 +439,42 @@ export default function ExplorePage() {
                 : "AI-matched to what you typed."}
             </p>
 
+            {!browseOpen && (narrating || narrateResult) && (
+              <div className="card-base !border-ai-match/25 bg-gradient-to-br from-ai-match/[0.09] to-transparent p-5 mb-5">
+                <div className="flex items-center gap-1.5 mb-3">
+                  <Sparkles size={13} className="text-ai-match" />
+                  <span className="text-xs font-mono text-ai-match font-medium">Ask the World</span>
+                </div>
+                {narrating && !narrateResult && (
+                  <div className="space-y-2">
+                    <div className="skeleton h-3.5 w-full" />
+                    <div className="skeleton h-3.5 w-5/6" />
+                    <div className="skeleton h-3.5 w-2/3" />
+                  </div>
+                )}
+                {narrateResult && (
+                  <>
+                    <p className="text-sm text-text-primary leading-relaxed mb-4">
+                      {narrateResult.narrative}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {narrateResult.citations.map((c) => (
+                        <a
+                          key={c.signal_id}
+                          href={`/human/${c.owner_id}`}
+                          className="text-[11px] font-mono text-ai-match bg-ai-match/10 border border-ai-match/25 rounded-pill px-2.5 py-1.5 no-underline hover:bg-ai-match/20 hover:border-ai-match/50 transition-colors duration-micro"
+                        >
+                          {c.display_name} · {c.region_label}
+                        </a>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {browseOpen && (
-              <div className="mb-4">
+              <div className="mb-6">
                 <div className="flex gap-2">
                   <input
                     value={browseRegion}
@@ -366,12 +539,12 @@ export default function ExplorePage() {
             )}
 
             {(browseOpen || !searching) && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {(browseOpen ? browseResults : searchResponse?.results)?.map((r) => (
-                  <ResultCard key={r.signal_id} result={r} showLabel={!browseOpen} />
+                  <ResultCard key={r.signal_id} result={r} person={people[r.owner_id]} />
                 ))}
                 {browseOpen && browseResults === null && (
-                  <div className="space-y-2">
+                  <div className="space-y-3">
                     {[0, 1, 2].map((i) => (
                       <div key={i} className="skeleton h-20 w-full" />
                     ))}
@@ -399,17 +572,19 @@ export default function ExplorePage() {
   );
 }
 
-const POPUP_WIDTH = 288;
-const POPUP_HEIGHT = 190;
+const POPUP_WIDTH = 300;
+const POPUP_HEIGHT = 210;
 const POPUP_MARGIN = 12;
 
 function PointPopup({
   point,
+  person,
   x,
   y,
   onClose,
 }: {
   point: GlobePoint;
+  person?: PersonaInfo;
   x: number;
   y: number;
   onClose: () => void;
@@ -421,24 +596,38 @@ function PointPopup({
 
   const badgeClass =
     point.kind === "NOW" ? "badge-now" : point.kind === "OPEN" ? "badge-open" : "badge-profile";
+  const name = person?.display_name ?? "…";
 
   return (
     <>
       {/* invisible full-screen layer so clicking anywhere outside the card closes it */}
       <div className="fixed inset-0 z-20" onClick={onClose} />
       <div
-        className="fixed z-30 card-base p-4 shadow-[0_8px_30px_rgba(0,0,0,0.5)]"
+        className="fixed z-30 card-base p-5 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
         style={{ left, top, width: POPUP_WIDTH }}
       >
-        <div className="flex items-center justify-between mb-2.5 gap-2">
-          <span className={badgeClass}>{point.kind}</span>
-          <button onClick={onClose} aria-label="Close" className="link-muted">
+        <div className="flex items-start justify-between mb-3 gap-2">
+          <a
+            href={`/human/${point.owner_id}`}
+            className="flex items-center gap-2.5 min-w-0 no-underline hover:opacity-80 transition-opacity"
+          >
+            <Avatar name={name} size={30} />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-text-primary truncate">{name}</p>
+              <p className="text-xs text-text-secondary truncate">{point.region_label}</p>
+            </div>
+          </a>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="h-6 w-6 shrink-0 rounded-full flex items-center justify-center text-text-secondary cursor-pointer hover:text-text-primary hover:bg-white/[0.07] transition-colors duration-micro"
+          >
             <X size={13} />
           </button>
         </div>
-        <p className="text-sm text-text-primary mb-1 leading-relaxed">{point.topic}</p>
-        <p className="text-xs text-text-secondary font-mono mb-3">{point.region_label}</p>
-        <div className="flex items-center gap-3 pt-2.5 border-t border-border/60">
+        <span className={badgeClass}>{point.kind}</span>
+        <p className="text-sm text-text-primary mt-2.5 mb-4 leading-relaxed">{point.topic}</p>
+        <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-border/50">
           <a href={`/human/${point.owner_id}`} className="link-muted hover:!text-ai-match">
             view profile →
           </a>
@@ -458,24 +647,32 @@ function LegendRow({ color, label }: { color: string; label: string }) {
   );
 }
 
-function ResultCard({ result, showLabel }: { result: SearchResult; showLabel: boolean }) {
+function ResultCard({ result, person }: { result: SearchResult; person?: PersonaInfo }) {
   const badgeClass =
     result.kind === "NOW" ? "badge-now" : result.kind === "OPEN" ? "badge-open" : "badge-profile";
+  const name = person?.display_name ?? "…";
   return (
-    <div className="card-interactive p-4">
-      <div className="flex items-center justify-between mb-2.5 gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={badgeClass}>{result.kind}</span>
-          <span className="text-xs text-text-secondary truncate">
-            {INTENT_LABELS[result.intent] ?? result.intent} · {result.region_label}
-          </span>
-        </div>
-        {showLabel && result.label && (
-          <span className="text-xs font-mono text-ai-match shrink-0">{result.label}</span>
-        )}
+    <div className="card-interactive p-5">
+      <div className="flex items-start justify-between gap-3 mb-3.5">
+        <a
+          href={`/human/${result.owner_id}`}
+          className="flex items-center gap-2.5 min-w-0 no-underline hover:opacity-80 transition-opacity"
+        >
+          <Avatar name={name} size={32} />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-text-primary truncate">{name}</p>
+            <p className="text-xs text-text-secondary truncate">
+              {result.region_label} · {INTENT_LABELS[result.intent] ?? result.intent}
+            </p>
+          </div>
+        </a>
+        <span className={`${badgeClass} shrink-0`}>{result.kind}</span>
       </div>
-      <p className="text-sm text-text-primary mb-3 leading-relaxed">{result.raw_text}</p>
-      <div className="flex items-center gap-3 pt-2.5 border-t border-border/60">
+      <p className="text-sm text-text-primary leading-relaxed mb-3.5">{result.raw_text}</p>
+      {result.label && (
+        <p className="text-xs font-mono text-ai-match mb-4">✨ {result.label}</p>
+      )}
+      <div className="flex flex-wrap items-center gap-4 pt-3.5 border-t border-border/50">
         <a href={`/human/${result.owner_id}`} className="link-muted hover:!text-ai-match">
           view profile →
         </a>

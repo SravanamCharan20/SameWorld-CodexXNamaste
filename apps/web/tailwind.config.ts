@@ -43,7 +43,7 @@ const config: Config = {
         12: "48px",
       },
       borderRadius: {
-        card: "8px",
+        card: "16px",
         pill: "20px",
       },
       transitionTimingFunction: {

@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.qdrant import ensure_collection
-from app.routers import auth, connections, conversations, globe, health, profile, search, signals
+from app.routers import auth, connections, conversations, globe, health, profile, pulse, search, signals
 from app.services.embeddings import warm_model
 
 settings = get_settings()
@@ -37,3 +37,4 @@ app.include_router(globe.router)
 app.include_router(profile.router)
 app.include_router(connections.router)
 app.include_router(conversations.router)
+app.include_router(pulse.router)

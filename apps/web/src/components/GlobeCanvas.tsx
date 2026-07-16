@@ -13,6 +13,7 @@ const OPEN_COLOR = "#F5B822";
 const AI_MATCH_COLOR = "#818CF8";
 const MINE_COLOR = "#A78BFA";
 const DIM_COLOR = "#3a3d4a";
+const GOLD_COLOR = "#F5B822";
 
 type LandFeature = {
   type: "Feature";
@@ -32,6 +33,7 @@ export type GlobeCanvasProps = {
   focusTarget: { lat: number; lng: number } | null;
   origin?: { lat: number; lng: number } | null;
   ownPersonaId?: string;
+  resonanceArc?: { startLat: number; startLng: number; endLat: number; endLng: number } | null;
   onPointClick?: (point: GlobePoint, event: MouseEvent) => void;
   onClusterClick?: (regionLabel: string, event: MouseEvent) => void;
 };
@@ -98,6 +100,7 @@ export default function GlobeCanvas({
   focusTarget,
   origin,
   ownPersonaId,
+  resonanceArc,
   onPointClick,
   onClusterClick,
 }: GlobeCanvasProps) {
@@ -200,17 +203,28 @@ export default function GlobeCanvas({
 
   // Arcs represent your search reaching out across the world: they fan out
   // from your own location to every matched result, not between the
-  // (unrelated) results themselves.
+  // (unrelated) results themselves. A resonance arc (gold) is a separate,
+  // independent overlay connecting two other people's signals — it can be
+  // visible whether or not a search is active.
   const arcsData = useMemo(() => {
-    if (highlightedIds.size === 0 || !origin) return [];
-    const highlighted = points.filter((p) => highlightedIds.has(p.id));
-    return highlighted.map((p) => ({
-      startLat: origin.lat,
-      startLng: origin.lng,
-      endLat: p.lat,
-      endLng: p.lng,
-    }));
-  }, [points, highlightedIds, origin]);
+    const arcs: { startLat: number; startLng: number; endLat: number; endLng: number; color: string }[] = [];
+    if (highlightedIds.size > 0 && origin) {
+      const highlighted = points.filter((p) => highlightedIds.has(p.id));
+      for (const p of highlighted) {
+        arcs.push({
+          startLat: origin.lat,
+          startLng: origin.lng,
+          endLat: p.lat,
+          endLng: p.lng,
+          color: AI_MATCH_COLOR,
+        });
+      }
+    }
+    if (resonanceArc) {
+      arcs.push({ ...resonanceArc, color: GOLD_COLOR });
+    }
+    return arcs;
+  }, [points, highlightedIds, origin, resonanceArc]);
 
   return (
     <Globe
@@ -321,7 +335,7 @@ export default function GlobeCanvas({
       ringPropagationSpeed={highlightedIds.size > 0 ? 2 : 1}
       ringRepeatPeriod={highlightedIds.size > 0 ? 1200 : 2600}
       arcsData={arcsData}
-      arcColor={() => AI_MATCH_COLOR}
+      arcColor={(d) => (d as { color: string }).color}
       arcAltitude={0.25}
       arcStroke={0.4}
       arcDashLength={0.4}

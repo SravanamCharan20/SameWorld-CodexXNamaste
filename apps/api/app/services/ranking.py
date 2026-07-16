@@ -53,6 +53,7 @@ def score_candidate(
     candidate_kind: str,
     region_filter: str | None,
     candidate_region: str,
+    region_required: bool = False,
 ) -> float:
     score = similarity
     if intent_complements(query_intent, candidate_intent):
@@ -60,6 +61,14 @@ def score_candidate(
     if tag_overlap(query_tags, candidate_tags):
         score += 0.10
     score += recency_boost(candidate_created_at, candidate_kind)
-    if same_region(region_filter, candidate_region):
+    matches_region = same_region(region_filter, candidate_region)
+    if region_required:
+        # An explicit ask ("I want USA people") isn't a soft preference — a
+        # generic travel-question match from the wrong continent used to
+        # rank right alongside genuine matches because the region signal was
+        # a same-sized nudge either way. A real mismatch penalty is what
+        # actually keeps a false-positive region below the results cutoff.
+        score += 0.15 if matches_region else -0.35
+    elif matches_region:
         score += 0.05
     return score

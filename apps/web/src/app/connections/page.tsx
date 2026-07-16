@@ -9,9 +9,9 @@ import { Connection } from "@/lib/types";
 import AppHeader from "@/components/AppHeader";
 import PageHeading from "@/components/PageHeading";
 import Avatar from "@/components/Avatar";
+import { usePersonaNames } from "@/lib/usePersonaNames";
 
 type Tab = "incoming" | "outgoing" | "accepted";
-type PersonaInfo = { id: string; display_name: string; region_label: string };
 
 // Which persona is "the other side" of a connection is a property of the
 // connection itself (direction), not of which tab you happen to be viewing —
@@ -28,7 +28,11 @@ export default function ConnectionsPage() {
   const [tab, setTab] = useState<Tab>("incoming");
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [people, setPeople] = useState<Record<string, PersonaInfo>>({});
+  // Every card used to show only a rationale string and a message with no
+  // indication of WHO — this fetches (and caches) the other participant's
+  // name/region for every connection on screen so each card can say plainly
+  // who it's with.
+  const people = usePersonaNames(connections?.map(otherPersonaId) ?? []);
 
   useEffect(() => {
     const stored = getStoredPersona();
@@ -43,24 +47,6 @@ export default function ConnectionsPage() {
     if (persona) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persona, tab]);
-
-  // Every card used to show only a rationale string and a message with no
-  // indication of WHO — this fetches (and caches) the other participant's
-  // name/region for every connection on screen so each card can say plainly
-  // who it's with.
-  useEffect(() => {
-    if (!connections) return;
-    const missing = Array.from(new Set(connections.map(otherPersonaId))).filter((id) => !people[id]);
-    if (missing.length === 0) return;
-    Promise.all(missing.map((id) => apiFetch<PersonaInfo>(`/personas/${id}`))).then((results) => {
-      setPeople((prev) => {
-        const next = { ...prev };
-        for (const res of results) if (res.data) next[res.data.id] = res.data;
-        return next;
-      });
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connections]);
 
   async function load() {
     if (!persona) return;
