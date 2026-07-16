@@ -47,7 +47,7 @@ const config: Config = {
         pill: "20px",
       },
       transitionTimingFunction: {
-        "ease-out-expo": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "out-expo": "cubic-bezier(0.22, 1, 0.36, 1)",
       },
       transitionDuration: {
         micro: "150ms",

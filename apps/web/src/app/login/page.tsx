@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search, ArrowRight, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Persona, storePersona } from "@/lib/persona";
 
@@ -34,6 +35,13 @@ export default function LoginPage() {
     }
   }
 
+  const filtered = personas?.filter(
+    (p) =>
+      !filter ||
+      p.display_name.toLowerCase().includes(filter.toLowerCase()) ||
+      p.region_label.toLowerCase().includes(filter.toLowerCase())
+  );
+
   return (
     <main className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
       <div className="w-full max-w-md">
@@ -52,38 +60,47 @@ export default function LoginPage() {
         )}
 
         {personas && personas.length > 8 && (
-          <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            placeholder="Filter by name or region…"
-            className="w-full mb-3 bg-surface border border-border rounded-pill px-4 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
-          />
+          <div className="relative mb-3">
+            <Search size={15} className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none" />
+            <input
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by name or region…"
+              className="input-base w-full rounded-pill pl-10"
+            />
+          </div>
         )}
 
-        <div className="rounded-card border border-border bg-surface divide-y divide-border max-h-[60vh] overflow-y-auto">
+        <div className="card-base divide-y divide-border max-h-[60vh] overflow-y-auto">
           {personas === null && (
-            <p className="p-6 text-sm text-text-secondary font-mono">Loading personas…</p>
+            <div className="p-3 space-y-2">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="skeleton h-[52px] w-full" />
+              ))}
+            </div>
           )}
-          {personas
-            ?.filter(
-              (p) =>
-                !filter ||
-                p.display_name.toLowerCase().includes(filter.toLowerCase()) ||
-                p.region_label.toLowerCase().includes(filter.toLowerCase())
-            )
-            .map((p) => (
+          {filtered?.length === 0 && (
+            <p className="p-6 text-sm text-text-secondary text-center">
+              No personas match &ldquo;{filter}&rdquo;.
+            </p>
+          )}
+          {filtered?.map((p) => (
             <button
               key={p.id}
               onClick={() => login(p.id)}
               disabled={loggingIn !== null}
-              className="w-full flex items-center justify-between p-4 text-left transition-colors duration-micro hover:bg-white/[0.03] disabled:opacity-50"
+              className="w-full flex items-center justify-between p-4 text-left transition-colors duration-micro hover:bg-white/[0.04] active:bg-white/[0.06] disabled:opacity-50 disabled:pointer-events-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ai-match"
             >
               <div>
                 <p className="text-sm font-medium text-text-primary">{p.display_name}</p>
                 <p className="text-xs text-text-secondary font-mono">{p.region_label}</p>
               </div>
-              <span className="text-xs font-mono text-text-secondary">
-                {loggingIn === p.id ? "…" : "→"}
+              <span className="text-text-secondary">
+                {loggingIn === p.id ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <ArrowRight size={15} />
+                )}
               </span>
             </button>
           ))}

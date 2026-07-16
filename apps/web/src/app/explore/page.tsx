@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search, X, MapPinned, SearchX, LogOut, Radio, Users } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { clearPersona, getStoredPersona, Persona } from "@/lib/persona";
 import { ActivityItem, GlobePoint, SearchResponse, SearchResult } from "@/lib/types";
@@ -12,7 +13,7 @@ const GlobeCanvas = dynamic(() => import("@/components/GlobeCanvas"), {
   ssr: false,
   loading: () => (
     <div className="fixed inset-0 flex items-center justify-center">
-      <p className="text-sm text-text-secondary font-mono">Loading the globe…</p>
+      <p className="text-sm text-text-secondary font-mono">Waking up the globe…</p>
     </div>
   ),
 });
@@ -32,7 +33,7 @@ export default function ExplorePage() {
   const router = useRouter();
   const [persona, setPersona] = useState<Persona | null>(null);
   const [points, setPoints] = useState<GlobePoint[]>([]);
-  const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [activity, setActivity] = useState<ActivityItem[] | null>(null);
 
   const [queryText, setQueryText] = useState("");
   const [searching, setSearching] = useState(false);
@@ -157,27 +158,21 @@ export default function ExplorePage() {
         <h1 className="font-heading font-bold text-lg tracking-tight">
           SAME<span className="text-ai-match">WORLD</span>
         </h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-5">
           <span className="text-xs font-mono text-text-secondary hidden sm:inline">
             {persona.display_name} · {persona.region_label}
           </span>
-          <a
-            href="/me"
-            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-          >
-            my signals
+          <a href="/me" className="link-muted flex items-center gap-1.5">
+            <Radio size={13} />
+            <span className="hidden sm:inline">my signals</span>
           </a>
-          <a
-            href="/connections"
-            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-          >
-            connections
+          <a href="/connections" className="link-muted flex items-center gap-1.5">
+            <Users size={13} />
+            <span className="hidden sm:inline">connections</span>
           </a>
-          <button
-            onClick={logout}
-            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-          >
-            switch persona
+          <button onClick={logout} className="link-muted flex items-center gap-1.5">
+            <LogOut size={13} />
+            <span className="hidden sm:inline">switch persona</span>
           </button>
         </div>
       </div>
@@ -186,26 +181,29 @@ export default function ExplorePage() {
       <div className="fixed bottom-0 left-0 right-0 z-10 px-4 pb-6 pointer-events-none">
         <div className="max-w-lg mx-auto pointer-events-auto">
           <form onSubmit={search} className="flex gap-2 mb-3">
-            <input
-              value={queryText}
-              onChange={(e) => setQueryText(e.target.value)}
-              placeholder="Search for a human — a need, a question, a plan, a mood…"
-              className="flex-1 bg-surface/90 backdrop-blur border border-border rounded-pill px-4 py-3 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
-            />
-            <button
-              type="submit"
-              disabled={searching || !queryText.trim()}
-              className="rounded-pill bg-ai-match text-background text-sm font-medium px-6 disabled:opacity-40 transition-opacity duration-micro"
-            >
+            <div className="relative flex-1">
+              <Search
+                size={16}
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-text-secondary pointer-events-none"
+              />
+              <input
+                value={queryText}
+                onChange={(e) => setQueryText(e.target.value)}
+                placeholder="Search for a human — a need, a question, a plan, a mood…"
+                className="w-full bg-surface/90 backdrop-blur border border-border rounded-pill pl-10 pr-4 py-3 text-sm text-text-primary placeholder:text-text-secondary transition-colors duration-micro hover:border-text-secondary/50 focus:outline-none focus:ring-1 focus:ring-ai-match focus:border-ai-match"
+              />
+            </div>
+            <button type="submit" disabled={searching || !queryText.trim()} className="btn-primary px-6">
               {searching ? "…" : "Search"}
             </button>
             {hasSearched && (
               <button
                 type="button"
                 onClick={clearSearch}
-                className="rounded-pill border border-border bg-surface/90 backdrop-blur text-text-secondary text-sm px-4 hover:text-text-primary transition-colors duration-micro"
+                aria-label="Clear search"
+                className="btn-secondary bg-surface/90 backdrop-blur px-3"
               >
-                Clear
+                <X size={16} />
               </button>
             )}
           </form>
@@ -216,8 +214,9 @@ export default function ExplorePage() {
                 setBrowseOpen((v) => !v);
                 if (!browseOpen) runBrowse();
               }}
-              className="text-xs font-mono text-text-secondary hover:text-text-primary bg-surface/90 backdrop-blur border border-border rounded-pill px-3 py-1.5 transition-colors duration-micro"
+              className="link-muted flex items-center gap-1.5 bg-surface/90 backdrop-blur border border-border rounded-pill px-3 py-1.5"
             >
+              <MapPinned size={13} />
               {browseOpen ? "Hide Browse Nearby" : "Browse Nearby"}
             </button>
             <span className="text-xs font-mono text-text-secondary bg-surface/70 backdrop-blur rounded-pill px-3 py-1.5">
@@ -225,9 +224,13 @@ export default function ExplorePage() {
             </span>
           </div>
 
-          {!resultsPanelOpen && activity.length > 0 && (
+          {!resultsPanelOpen && (
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
-              {activity.map((a) => (
+              {activity === null &&
+                [0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton shrink-0 h-[52px] w-[180px]" />
+                ))}
+              {activity?.map((a) => (
                 <div
                   key={a.id}
                   className="shrink-0 bg-surface/80 backdrop-blur border border-border rounded-card px-3 py-2 max-w-[220px]"
@@ -263,8 +266,9 @@ export default function ExplorePage() {
                   clearSearch();
                   setBrowseOpen(false);
                 }}
-                className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
+                className="link-muted flex items-center gap-1"
               >
+                <X size={13} />
                 close
               </button>
             </div>
@@ -276,26 +280,41 @@ export default function ExplorePage() {
                   onChange={(e) => setBrowseRegion(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && runBrowse()}
                   placeholder="Filter by region (optional)"
-                  className="w-full bg-background border border-border rounded-card px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
+                  className="input-base w-full font-mono text-xs"
                 />
               </div>
             )}
 
-            {searching && (
-              <p className="text-sm text-text-secondary font-mono">Understanding what you need…</p>
-            )}
-
-            {!browseOpen && !searching && searchResponse?.empty && (
-              <div className="rounded-card border border-border bg-background p-6 text-center">
-                <p className="text-sm text-text-primary mb-1">{searchResponse.message}</p>
+            {!browseOpen && searching && (
+              <div className="space-y-2">
+                <p className="text-sm text-text-secondary font-mono mb-3">
+                  Understanding what you need…
+                </p>
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="skeleton h-20 w-full" />
+                ))}
               </div>
             )}
 
-            {!searching && (
+            {!browseOpen && !searching && searchResponse?.empty && (
+              <div className="card-base p-8 text-center flex flex-col items-center gap-3">
+                <SearchX size={28} className="text-text-secondary" />
+                <p className="text-sm text-text-primary">{searchResponse.message}</p>
+              </div>
+            )}
+
+            {(browseOpen || !searching) && (
               <div className="space-y-2">
                 {(browseOpen ? browseResults : searchResponse?.results)?.map((r) => (
                   <ResultCard key={r.signal_id} result={r} showLabel={!browseOpen} />
                 ))}
+                {browseOpen && browseResults === null && (
+                  <div className="space-y-2">
+                    {[0, 1, 2].map((i) => (
+                      <div key={i} className="skeleton h-20 w-full" />
+                    ))}
+                  </div>
+                )}
                 {browseOpen && browseResults?.length === 0 && (
                   <p className="text-sm text-text-secondary">No active signals in this region yet.</p>
                 )}
@@ -310,7 +329,7 @@ export default function ExplorePage() {
 
 function ResultCard({ result, showLabel }: { result: SearchResult; showLabel: boolean }) {
   return (
-    <div className="rounded-card border border-border bg-background p-4">
+    <div className="card-interactive p-4">
       <div className="flex items-center justify-between mb-2 gap-2">
         <div className="flex items-center gap-2 min-w-0">
           <span
@@ -328,10 +347,7 @@ function ResultCard({ result, showLabel }: { result: SearchResult; showLabel: bo
       </div>
       <p className="text-sm text-text-primary mb-2">{result.raw_text}</p>
       <div className="flex items-center gap-3">
-        <a
-          href={`/human/${result.owner_id}`}
-          className="text-xs font-mono text-text-secondary hover:text-ai-match transition-colors duration-micro"
-        >
+        <a href={`/human/${result.owner_id}`} className="link-muted hover:!text-ai-match">
           view profile →
         </a>
         <ConnectButton signalId={result.signal_id} ownerId={result.owner_id} rationale={result.label} />

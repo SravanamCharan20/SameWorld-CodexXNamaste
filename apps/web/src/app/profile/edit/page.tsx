@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { UserCircle2, Compass, ShieldAlert, CheckCircle2, Save } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
 import { ContactIntent, ProfileUpsertResponse, Signal, Visibility } from "@/lib/types";
@@ -61,7 +62,16 @@ export default function ProfileEditPage() {
     setSaving(false);
   }
 
-  if (!persona || loading) return null;
+  if (!persona || loading) {
+    return (
+      <main className="min-h-screen px-4 py-12">
+        <div className="w-full max-w-lg mx-auto space-y-4">
+          <div className="skeleton h-8 w-40" />
+          <div className="skeleton h-64 w-full" />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-screen px-4 py-12">
@@ -71,16 +81,12 @@ export default function ProfileEditPage() {
             SAME<span className="text-ai-match">WORLD</span>
           </h1>
           <div className="flex items-center gap-4">
-            <a
-              href={`/human/${persona.id}`}
-              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-            >
+            <a href={`/human/${persona.id}`} className="link-muted flex items-center gap-1.5">
+              <UserCircle2 size={13} />
               view my card
             </a>
-            <a
-              href="/explore"
-              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-            >
+            <a href="/explore" className="link-muted flex items-center gap-1.5">
+              <Compass size={13} />
               explore
             </a>
           </div>
@@ -95,10 +101,7 @@ export default function ProfileEditPage() {
           Card.
         </p>
 
-        <form
-          onSubmit={save}
-          className="rounded-card border border-border bg-surface p-4 space-y-4"
-        >
+        <form onSubmit={save} className="card-base p-4 space-y-4">
           <div>
             <label className="text-xs font-mono text-text-secondary block mb-1">Bio</label>
             <textarea
@@ -106,7 +109,7 @@ export default function ProfileEditPage() {
               onChange={(e) => setBio(e.target.value)}
               placeholder="Who are you, what do you do, what are you open to?"
               rows={4}
-              className="w-full bg-background border border-border rounded-card px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary resize-none focus:outline-none focus:ring-1 focus:ring-ai-match"
+              className="input-base w-full resize-none"
             />
           </div>
 
@@ -118,7 +121,7 @@ export default function ProfileEditPage() {
               value={tagsInput}
               onChange={(e) => setTagsInput(e.target.value)}
               placeholder="product design, fintech, climate tech"
-              className="w-full bg-background border border-border rounded-card px-3 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
+              className="input-base w-full"
             />
           </div>
 
@@ -131,7 +134,7 @@ export default function ProfileEditPage() {
               onChange={(e) => setLinksInput(e.target.value)}
               placeholder="https://yoursite.com"
               rows={2}
-              className="w-full bg-background border border-border rounded-card px-3 py-2 text-xs font-mono text-text-primary placeholder:text-text-secondary resize-none focus:outline-none focus:ring-1 focus:ring-ai-match"
+              className="input-base w-full font-mono text-xs resize-none"
             />
           </div>
 
@@ -143,7 +146,7 @@ export default function ProfileEditPage() {
               <select
                 value={visibility}
                 onChange={(e) => setVisibility(e.target.value as Visibility)}
-                className="w-full bg-background border border-border rounded-card px-2 py-2 text-xs font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-ai-match"
+                className="input-base w-full font-mono text-xs py-2"
               >
                 <option value="worldwide">Worldwide</option>
                 <option value="country">Country</option>
@@ -157,7 +160,7 @@ export default function ProfileEditPage() {
               <select
                 value={contactIntent}
                 onChange={(e) => setContactIntent(e.target.value as ContactIntent)}
-                className="w-full bg-background border border-border rounded-card px-2 py-2 text-xs font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-ai-match"
+                className="input-base w-full font-mono text-xs py-2"
               >
                 <option value="just_sharing">Just sharing</option>
                 <option value="open_to_conversation">Open to conversation</option>
@@ -168,17 +171,22 @@ export default function ProfileEditPage() {
 
           {error && (
             <div>
-              <p className="text-sm text-red-400">This didn&apos;t clear the safety gate.</p>
+              <p className="text-sm text-red-400 flex items-center gap-1.5">
+                <ShieldAlert size={14} />
+                This didn&apos;t clear the safety gate.
+              </p>
               <p className="text-xs text-text-secondary font-mono mt-1">{error}</p>
             </div>
           )}
-          {saved && <p className="text-xs text-now font-mono">Profile saved.</p>}
+          {saved && (
+            <p className="text-xs text-now font-mono flex items-center gap-1.5">
+              <CheckCircle2 size={13} />
+              Profile saved.
+            </p>
+          )}
 
-          <button
-            type="submit"
-            disabled={saving || !bio.trim()}
-            className="rounded-pill bg-ai-match text-background text-sm font-medium px-6 py-2 disabled:opacity-40 transition-opacity duration-micro"
-          >
+          <button type="submit" disabled={saving || !bio.trim()} className="btn-primary flex items-center gap-1.5">
+            <Save size={14} />
             {saving ? "Saving…" : "Save Profile"}
           </button>
         </form>

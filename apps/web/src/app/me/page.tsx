@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Compass, Users, LogOut, ShieldAlert, Sparkles, Inbox, CheckCircle2, UserCircle2 } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { clearPersona, getStoredPersona, Persona } from "@/lib/persona";
 import { Signal, SignalPreview } from "@/lib/types";
@@ -25,6 +26,7 @@ export default function MePage() {
   const [tagsInput, setTagsInput] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [preview, setPreview] = useState<SignalPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -86,6 +88,17 @@ export default function MePage() {
     setConfirming(false);
   }
 
+  async function resolve(signalId: string) {
+    if (!persona) return;
+    setResolvingId(signalId);
+    const res = await apiFetch<Signal>(`/signals/${signalId}/resolve`, {
+      method: "POST",
+      headers: personaHeaders(persona.id),
+    });
+    if (res.data) await refreshSignals(persona);
+    setResolvingId(null);
+  }
+
   function discardPreview() {
     setPreview(null);
   }
@@ -100,38 +113,36 @@ export default function MePage() {
   return (
     <main className="min-h-screen px-4 py-12">
       <div className="w-full max-w-lg mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
+        <div className="mb-8">
+          <div className="flex items-center justify-between">
             <h1 className="font-heading font-bold text-xl tracking-tight">
               SAME<span className="text-ai-match">WORLD</span>
             </h1>
-            <p className="text-sm text-text-secondary font-mono mt-1">
-              {persona.display_name} · {persona.region_label}
-            </p>
+            <div className="flex items-center gap-3.5">
+              <a href="/explore" className="link-muted flex items-center gap-1.5 whitespace-nowrap">
+                <Compass size={13} />
+                explore
+              </a>
+              <a href={`/human/${persona.id}`} className="link-muted flex items-center gap-1.5 whitespace-nowrap">
+                <UserCircle2 size={13} />
+                my card
+              </a>
+              <a href="/connections" className="link-muted flex items-center gap-1.5 whitespace-nowrap">
+                <Users size={13} />
+                connections
+              </a>
+              <button onClick={logout} className="link-muted flex items-center gap-1.5 whitespace-nowrap">
+                <LogOut size={13} />
+                switch
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <a
-              href="/explore"
-              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-            >
-              explore
-            </a>
-            <a
-              href="/connections"
-              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-            >
-              connections
-            </a>
-            <button
-              onClick={logout}
-              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-            >
-              switch persona
-            </button>
-          </div>
+          <p className="text-sm text-text-secondary font-mono mt-1">
+            {persona.display_name} · {persona.region_label}
+          </p>
         </div>
 
-        <div className="rounded-card border border-border bg-surface p-4 mb-8">
+        <div className="card-base p-4 mb-8">
           <form onSubmit={analyze}>
             <textarea
               value={rawText}
@@ -150,13 +161,13 @@ export default function MePage() {
                 onChange={(e) => setTagsInput(e.target.value)}
                 placeholder="tags, comma, separated (optional)"
                 disabled={!!preview}
-                className="flex-1 bg-background border border-border rounded-card px-2 py-1 text-xs font-mono text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match disabled:opacity-60"
+                className="input-base flex-1 text-xs font-mono disabled:opacity-60"
               />
               {!preview && (
                 <button
                   type="submit"
                   disabled={analyzing || !rawText.trim()}
-                  className="rounded-pill bg-ai-match text-background text-xs font-medium px-4 py-1.5 disabled:opacity-40 transition-opacity duration-micro whitespace-nowrap"
+                  className="btn-primary px-4 py-1.5 text-xs whitespace-nowrap"
                 >
                   {analyzing ? "Understanding…" : "Analyze"}
                 </button>
@@ -168,12 +179,12 @@ export default function MePage() {
 
           {preview?.blocked && (
             <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-sm text-red-400">This didn't clear the safety gate.</p>
+              <p className="text-sm text-red-400 flex items-center gap-1.5">
+                <ShieldAlert size={14} />
+                This didn&apos;t clear the safety gate.
+              </p>
               <p className="text-xs text-text-secondary font-mono mt-1">{preview.reason}</p>
-              <button
-                onClick={discardPreview}
-                className="mt-3 text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-              >
+              <button onClick={discardPreview} className="link-muted mt-3">
                 edit and try again
               </button>
             </div>
@@ -181,7 +192,10 @@ export default function MePage() {
 
           {preview && !preview.blocked && (
             <div className="mt-3 pt-3 border-t border-border">
-              <p className="text-xs text-text-secondary font-mono mb-2">AI preview</p>
+              <p className="text-xs text-text-secondary font-mono mb-2 flex items-center gap-1.5">
+                <Sparkles size={12} />
+                AI preview
+              </p>
               <div className="flex items-center gap-2 mb-2">
                 <span
                   className={`h-2 w-2 rounded-full ${
@@ -206,18 +220,10 @@ export default function MePage() {
                 </div>
               )}
               <div className="flex gap-2">
-                <button
-                  onClick={confirm}
-                  disabled={confirming}
-                  className="rounded-pill bg-ai-match text-background text-xs font-medium px-4 py-1.5 disabled:opacity-40 transition-opacity duration-micro"
-                >
+                <button onClick={confirm} disabled={confirming} className="btn-primary px-4 py-1.5 text-xs">
                   {confirming ? "Posting…" : "Confirm & Post"}
                 </button>
-                <button
-                  onClick={discardPreview}
-                  disabled={confirming}
-                  className="rounded-pill border border-border text-text-secondary text-xs font-medium px-4 py-1.5 transition-colors duration-micro hover:text-text-primary"
-                >
+                <button onClick={discardPreview} disabled={confirming} className="btn-secondary px-4 py-1.5 text-xs">
                   Edit
                 </button>
               </div>
@@ -228,27 +234,47 @@ export default function MePage() {
         <h2 className="text-sm text-text-secondary mb-3">My Signals</h2>
         <div className="space-y-2">
           {signals === null && (
-            <p className="text-sm text-text-secondary font-mono">Loading…</p>
+            <div className="space-y-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="skeleton h-20 w-full" />
+              ))}
+            </div>
           )}
           {signals?.length === 0 && (
-            <p className="text-sm text-text-secondary">
-              No signals yet — post your first one above.
-            </p>
+            <div className="card-base p-8 text-center flex flex-col items-center gap-2">
+              <Inbox size={24} className="text-text-secondary" />
+              <p className="text-sm text-text-secondary">No signals yet — post your first one above.</p>
+            </div>
           )}
           {signals?.map((s) => (
-            <div
-              key={s.id}
-              className="rounded-card border border-border bg-surface p-4"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    s.kind === "NOW" ? "bg-now" : "bg-open"
-                  }`}
-                />
-                <span className="text-xs font-mono text-text-secondary">
-                  {s.kind} · {s.intent} · {s.status}
-                </span>
+            <div key={s.id} className="card-base p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={`h-2 w-2 rounded-full ${
+                      s.status === "resolved"
+                        ? "bg-resolved"
+                        : s.kind === "PROFILE"
+                        ? "bg-ai-match"
+                        : s.kind === "NOW"
+                        ? "bg-now"
+                        : "bg-open"
+                    }`}
+                  />
+                  <span className="text-xs font-mono text-text-secondary">
+                    {s.kind} · {s.intent} · {s.status}
+                  </span>
+                </div>
+                {s.status === "active" && !s.is_profile && (
+                  <button
+                    onClick={() => resolve(s.id)}
+                    disabled={resolvingId === s.id}
+                    className="link-muted flex items-center gap-1 hover:!text-now disabled:opacity-40"
+                  >
+                    <CheckCircle2 size={13} />
+                    {resolvingId === s.id ? "…" : "resolve"}
+                  </button>
+                )}
               </div>
               <p className="text-sm text-text-primary">{s.raw_text}</p>
               {s.tags.length > 0 && (

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Compass, Inbox, Check, X, MessageCircle } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
 import { Connection } from "@/lib/types";
@@ -26,6 +27,7 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     if (persona) load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persona, tab]);
 
   async function load() {
@@ -61,6 +63,12 @@ export default function ConnectionsPage() {
 
   if (!persona) return null;
 
+  const emptyCopy: Record<Tab, string> = {
+    incoming: "No pending requests — when someone reaches out, it'll show up here.",
+    outgoing: "You haven't reached out to anyone yet.",
+    accepted: "No accepted connections yet.",
+  };
+
   return (
     <main className="min-h-screen px-4 py-12">
       <div className="w-full max-w-lg mx-auto">
@@ -68,10 +76,8 @@ export default function ConnectionsPage() {
           <h1 className="font-heading font-bold text-xl tracking-tight">
             SAME<span className="text-ai-match">WORLD</span>
           </h1>
-          <a
-            href="/explore"
-            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-          >
+          <a href="/explore" className="link-muted flex items-center gap-1.5">
+            <Compass size={13} />
             explore
           </a>
         </div>
@@ -81,7 +87,7 @@ export default function ConnectionsPage() {
             <button
               key={t}
               onClick={() => setTab(t)}
-              className={`px-4 py-2 text-sm capitalize border-b-2 transition-colors duration-micro ${
+              className={`tab-item ${
                 tab === t
                   ? "border-ai-match text-text-primary"
                   : "border-transparent text-text-secondary hover:text-text-primary"
@@ -94,21 +100,28 @@ export default function ConnectionsPage() {
 
         <div className="space-y-2">
           {connections === null && (
-            <p className="text-sm text-text-secondary font-mono">Loading…</p>
+            <div className="space-y-2">
+              {[0, 1].map((i) => (
+                <div key={i} className="skeleton h-28 w-full" />
+              ))}
+            </div>
           )}
           {connections?.length === 0 && (
-            <p className="text-sm text-text-secondary">Nothing here yet.</p>
+            <div className="card-base p-8 text-center flex flex-col items-center gap-2">
+              <Inbox size={24} className="text-text-secondary" />
+              <p className="text-sm text-text-secondary">{emptyCopy[tab]}</p>
+            </div>
           )}
           {connections?.map((c) => (
-            <div key={c.id} className="rounded-card border border-border bg-surface p-4">
+            <div key={c.id} className="card-base p-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-mono text-ai-match">{c.rationale}</span>
-                <span className="text-xs font-mono text-text-secondary">{c.status}</span>
+                <span className="text-xs font-mono text-text-secondary capitalize">{c.status}</span>
               </div>
               <p className="text-sm text-text-primary mb-2">{c.message}</p>
               <a
                 href={`/human/${tab === "incoming" ? c.requester_id : c.recipient_id}`}
-                className="text-xs font-mono text-text-secondary hover:text-ai-match transition-colors duration-micro"
+                className="link-muted hover:!text-ai-match"
               >
                 view profile →
               </a>
@@ -118,15 +131,17 @@ export default function ConnectionsPage() {
                   <button
                     onClick={() => respond(c.id, "accept")}
                     disabled={busyId === c.id}
-                    className="rounded-pill bg-ai-match text-background text-xs font-medium px-4 py-1.5 disabled:opacity-40 transition-opacity duration-micro"
+                    className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1"
                   >
+                    <Check size={13} />
                     Accept
                   </button>
                   <button
                     onClick={() => respond(c.id, "decline")}
                     disabled={busyId === c.id}
-                    className="rounded-pill border border-border text-text-secondary text-xs font-medium px-4 py-1.5 hover:text-text-primary transition-colors duration-micro"
+                    className="btn-secondary px-4 py-1.5 text-xs flex items-center gap-1"
                   >
+                    <X size={13} />
                     Decline
                   </button>
                 </div>
@@ -135,9 +150,10 @@ export default function ConnectionsPage() {
               {c.status === "accepted" && c.conversation_id && (
                 <a
                   href={`/conversation/${c.conversation_id}`}
-                  className="inline-block mt-3 text-xs font-mono text-ai-match hover:underline"
+                  className="link-muted hover:!text-ai-match inline-flex items-center gap-1 mt-3"
                 >
-                  open conversation →
+                  <MessageCircle size={13} />
+                  open conversation
                 </a>
               )}
             </div>

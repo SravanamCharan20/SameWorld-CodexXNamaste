@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Flag, DoorOpen, Send, CheckCircle2, Sparkles, X } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
 import { Conversation } from "@/lib/types";
@@ -96,7 +97,15 @@ export default function ConversationPage() {
     setShowReport(false);
   }
 
-  if (!persona || !conversation) return null;
+  if (!persona || !conversation) {
+    return (
+      <main className="min-h-screen flex flex-col px-4 py-5 gap-4">
+        <div className="skeleton h-5 w-24" />
+        <div className="skeleton h-20 w-full" />
+        <div className="skeleton h-12 w-2/3 self-end" />
+      </main>
+    );
+  }
 
   const canResolve = conversation.pinned_context.owner_id === persona.id;
   const isEnded = conversation.status === "ended";
@@ -104,24 +113,18 @@ export default function ConversationPage() {
   return (
     <main className="min-h-screen flex flex-col">
       <div className="px-4 py-5 flex items-center justify-between border-b border-border">
-        <a
-          href="/connections"
-          className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-        >
-          ← connections
+        <a href="/connections" className="link-muted flex items-center gap-1">
+          <ArrowLeft size={13} />
+          connections
         </a>
         <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowReport(true)}
-            className="text-xs font-mono text-text-secondary hover:text-red-400 transition-colors duration-micro"
-          >
+          <button onClick={() => setShowReport(true)} className="link-muted hover:!text-red-400 flex items-center gap-1">
+            <Flag size={13} />
             report
           </button>
           {!isEnded && (
-            <button
-              onClick={endConversation}
-              className="text-xs font-mono text-text-secondary hover:text-red-400 transition-colors duration-micro"
-            >
+            <button onClick={endConversation} className="link-muted hover:!text-red-400 flex items-center gap-1">
+              <DoorOpen size={13} />
               end conversation
             </button>
           )}
@@ -129,11 +132,12 @@ export default function ConversationPage() {
       </div>
 
       <div
-        className={`mx-4 mt-4 rounded-card border p-4 transition-opacity duration-panel ${
-          resolved ? "opacity-40 border-resolved" : "border-ai-match/40"
+        className={`mx-4 mt-4 card-base p-4 transition-opacity duration-panel ${
+          resolved ? "opacity-40 !border-resolved" : "!border-ai-match/40"
         }`}
       >
-        <span className="text-xs font-mono text-ai-match">
+        <span className="text-xs font-mono text-ai-match flex items-center gap-1">
+          {conversation.pinned_context.is_profile ? <Sparkles size={11} /> : null}
           {conversation.pinned_context.is_profile ? "PROFILE" : "SIGNAL"} ·{" "}
           {conversation.pinned_context.rationale}
         </span>
@@ -141,32 +145,31 @@ export default function ConversationPage() {
       </div>
 
       {showReport && (
-        <div className="mx-4 mt-3 rounded-card border border-red-400/40 bg-surface p-4">
+        <div className="mx-4 mt-3 card-base !border-red-400/40 p-4">
           <textarea
             value={reportReason}
             onChange={(e) => setReportReason(e.target.value)}
             placeholder="What's wrong? (optional)"
             rows={2}
+            autoFocus
             className="w-full bg-background border border-border rounded-card px-3 py-2 text-xs text-text-primary resize-none focus:outline-none focus:ring-1 focus:ring-red-400"
           />
           <div className="flex gap-2 mt-2">
-            <button
-              onClick={submitReport}
-              className="rounded-pill bg-red-500 text-background text-xs font-medium px-4 py-1.5"
-            >
+            <button onClick={submitReport} className="rounded-pill bg-red-500 text-background text-xs font-medium px-4 py-1.5 transition-all duration-micro hover:brightness-110 active:brightness-95">
               Submit report
             </button>
-            <button
-              onClick={() => setShowReport(false)}
-              className="rounded-pill border border-border text-text-secondary text-xs font-medium px-4 py-1.5"
-            >
+            <button onClick={() => setShowReport(false)} className="btn-secondary px-4 py-1.5 text-xs flex items-center gap-1">
+              <X size={12} />
               Cancel
             </button>
           </div>
         </div>
       )}
       {reported && (
-        <p className="mx-4 mt-2 text-xs text-text-secondary font-mono">Report submitted. Thank you.</p>
+        <p className="mx-4 mt-2 text-xs text-text-secondary font-mono flex items-center gap-1">
+          <CheckCircle2 size={12} />
+          Report submitted. Thank you.
+        </p>
       )}
 
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
@@ -194,7 +197,8 @@ export default function ConversationPage() {
 
       <div className="px-4 py-4 border-t border-border">
         {resolved ? (
-          <p className="text-sm text-now font-mono text-center">
+          <p className="text-sm text-now font-mono text-center flex items-center justify-center gap-1.5">
+            <CheckCircle2 size={15} />
             Resolved — success isn&apos;t time spent, it&apos;s needs resolved.
           </p>
         ) : isEnded ? (
@@ -206,13 +210,10 @@ export default function ConversationPage() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 placeholder="Type a message…"
-                className="flex-1 bg-surface border border-border rounded-pill px-4 py-2 text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:ring-1 focus:ring-ai-match"
+                className="input-base flex-1 rounded-pill"
               />
-              <button
-                type="submit"
-                disabled={sending || !text.trim()}
-                className="rounded-pill bg-ai-match text-background text-sm font-medium px-5 disabled:opacity-40 transition-opacity duration-micro"
-              >
+              <button type="submit" disabled={sending || !text.trim()} className="btn-primary px-5 flex items-center gap-1.5">
+                <Send size={14} />
                 Send
               </button>
             </form>
@@ -220,8 +221,9 @@ export default function ConversationPage() {
               <button
                 onClick={resolve}
                 disabled={resolving}
-                className="w-full rounded-pill border border-now text-now text-sm font-medium py-2 disabled:opacity-40 transition-opacity duration-micro"
+                className="w-full rounded-pill border border-now text-now text-sm font-medium py-2 transition-all duration-micro hover:bg-now/10 active:brightness-95 disabled:opacity-40 flex items-center justify-center gap-1.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-now focus-visible:ring-offset-2 focus-visible:ring-offset-background"
               >
+                <CheckCircle2 size={14} />
                 {resolving ? "…" : "I found what I needed"}
               </button>
             )}

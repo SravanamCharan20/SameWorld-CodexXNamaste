@@ -105,10 +105,7 @@ export default function Home() {
 
         {health?.all_services_up && (
           <div className="mt-8 text-center">
-            <a
-              href="/login"
-              className="inline-block rounded-pill bg-ai-match text-background text-sm font-medium px-6 py-2 transition-opacity duration-micro hover:opacity-90"
-            >
+            <a href="/login" className="btn-primary inline-block">
               Enter SameWorld →
             </a>
           </div>
