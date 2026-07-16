@@ -22,6 +22,12 @@ async def ensure_collection() -> None:
                 size=settings.embedding_dim, distance=models.Distance.COSINE
             ),
         )
+    for field_name in ("status", "contact_intent"):
+        await client.create_payload_index(
+            collection_name=settings.qdrant_collection,
+            field_name=field_name,
+            field_schema=models.PayloadSchemaType.KEYWORD,
+        )
 
 
 async def ping_qdrant() -> bool:
@@ -46,3 +52,22 @@ async def delete_signal_point(point_id: str) -> None:
         collection_name=settings.qdrant_collection,
         points_selector=models.PointIdsList(points=[point_id]),
     )
+
+
+async def search_candidates(vector: list[float], limit: int = 30) -> list[models.ScoredPoint]:
+    settings = get_settings()
+    client = get_qdrant_client()
+    result = await client.query_points(
+        collection_name=settings.qdrant_collection,
+        query=vector,
+        limit=limit,
+        query_filter=models.Filter(
+            must=[models.FieldCondition(key="status", match=models.MatchValue(value="active"))],
+            must_not=[
+                models.FieldCondition(
+                    key="contact_intent", match=models.MatchValue(value="just_sharing")
+                )
+            ],
+        ),
+    )
+    return result.points

@@ -46,3 +46,24 @@ export type SignalPreview =
       suggested_kind: SignalKind;
       region_label: string;
     };
+
+export type SearchResult = {
+  signal_id: string;
+  owner_id: string;
+  raw_text: string;
+  topic: string;
+  intent: Intent;
+  kind: SignalKind;
+  tags: string[];
+  region_label: string;
+  is_profile: boolean;
+  score: number;
+  similarity: number;
+  label: string;
+};
+
+export type SearchResponse = {
+  empty: boolean;
+  message: string | null;
+  results: SearchResult[];
+};

@@ -109,12 +109,20 @@ export default function MePage() {
               {persona.display_name} · {persona.region_label}
             </p>
           </div>
-          <button
-            onClick={logout}
-            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
-          >
-            switch persona
-          </button>
+          <div className="flex items-center gap-4">
+            <a
+              href="/search"
+              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
+            >
+              search
+            </a>
+            <button
+              onClick={logout}
+              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
+            >
+              switch persona
+            </button>
+          </div>
         </div>
 
         <div className="rounded-card border border-border bg-surface p-4 mb-8">

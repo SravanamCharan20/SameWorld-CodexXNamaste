@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.qdrant import ensure_collection
-from app.routers import auth, health, signals
+from app.routers import auth, health, search, signals
 
 settings = get_settings()
 
@@ -30,3 +30,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(auth.router)
 app.include_router(signals.router)
+app.include_router(search.router)

@@ -73,13 +73,17 @@ def build_signal_document(
 def qdrant_payload_for(doc: dict) -> dict:
     return {
         "signal_id": str(doc["_id"]),
+        "owner_id": doc["owner_id"],
         "is_profile": doc["is_profile"],
+        "raw_text": doc["raw_text"],
+        "kind": doc["kind"],
         "intent": doc["intent"],
         "topic": doc["topic"],
         "tags": doc["tags"],
         "region_label": doc["region_label"],
         "contact_intent": doc["contact_intent"],
         "status": doc["status"],
+        "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
         "expires_at": doc["expires_at"].isoformat() if doc.get("expires_at") else None,
     }
 
