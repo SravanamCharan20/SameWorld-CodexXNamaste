@@ -34,3 +34,15 @@ export type Signal = {
   resolved_at: string | null;
   edited_at: string | null;
 };
+
+export type SignalPreview =
+  | { blocked: true; reason: string; risk_flags: string[] }
+  | {
+      blocked: false;
+      preview_id: string;
+      intent: Intent;
+      topic: string;
+      tags: string[];
+      suggested_kind: SignalKind;
+      region_label: string;
+    };

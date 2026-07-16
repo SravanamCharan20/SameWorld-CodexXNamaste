@@ -1,11 +1,24 @@
+import asyncio
+import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 
 from app.db.mongo import get_db
+from app.db.qdrant import upsert_signal_point
 from app.deps import get_current_persona_id
 from app.envelope import ok
-from app.models.signal import SignalCreate, new_signal_document, serialize_signal
+from app.models.signal import (
+    SignalConfirm,
+    SignalCreate,
+    build_signal_document,
+    qdrant_payload_for,
+    serialize_signal,
+)
+from app.services.embeddings import embed
+from app.services.intent_extraction import extract_intent
+from app.services.preview_store import delete_preview, get_preview, save_preview
+from app.services.safety import run_safety_gate
 
 router = APIRouter()
 
@@ -16,15 +29,79 @@ async def create_signal(
 ):
     db = get_db()
     persona = await db.personas.find_one({"_id": persona_id})
-    doc = new_signal_document(
-        owner_id=persona_id,
-        payload=payload,
-        region_label=persona["region_label"],
-        region_lat=persona["region_lat"],
-        region_lng=persona["region_lng"],
+
+    safety = await run_safety_gate(payload.raw_text)
+    if safety["blocked"]:
+        return ok(
+            {
+                "blocked": True,
+                "reason": safety["reason"],
+                "risk_flags": safety["risk_flags"],
+            }
+        )
+
+    analysis, vector = await asyncio.gather(
+        extract_intent(payload.raw_text), embed(payload.raw_text)
     )
+    merged_tags = list(dict.fromkeys([*payload.tags, *analysis["tags"]]))[:6]
+
+    preview = {
+        "owner_id": persona_id,
+        "raw_text": payload.raw_text,
+        "visibility": payload.visibility,
+        "contact_intent": payload.contact_intent,
+        "tags": merged_tags,
+        "region_label": persona["region_label"],
+        "region_lat": persona["region_lat"],
+        "region_lng": persona["region_lng"],
+        "intent": analysis["intent"],
+        "topic": analysis["topic"],
+        "kind": analysis["suggested_kind"],
+        "vector": vector,
+    }
+    preview_id = await save_preview(preview)
+
+    return ok(
+        {
+            "blocked": False,
+            "preview_id": preview_id,
+            "intent": analysis["intent"],
+            "topic": analysis["topic"],
+            "tags": merged_tags,
+            "suggested_kind": analysis["suggested_kind"],
+            "region_label": persona["region_label"],
+        }
+    )
+
+
+@router.post("/signals/confirm")
+async def confirm_signal(body: SignalConfirm):
+    preview = await get_preview(body.preview_id)
+    if not preview:
+        raise HTTPException(status_code=404, detail="Preview expired or not found")
+
+    db = get_db()
+    doc = build_signal_document(
+        owner_id=preview["owner_id"],
+        raw_text=preview["raw_text"],
+        visibility=preview["visibility"],
+        contact_intent=preview["contact_intent"],
+        tags=preview["tags"],
+        region_label=preview["region_label"],
+        region_lat=preview["region_lat"],
+        region_lng=preview["region_lng"],
+        intent=preview["intent"],
+        topic=preview["topic"],
+        kind=preview["kind"],
+    )
+    point_id = str(uuid.uuid4())
+    doc["qdrant_point_id"] = point_id
     result = await db.signals.insert_one(doc)
     doc["_id"] = result.inserted_id
+
+    await upsert_signal_point(point_id, preview["vector"], qdrant_payload_for(doc))
+
+    await delete_preview(body.preview_id)
     return ok(serialize_signal(doc))
 
 

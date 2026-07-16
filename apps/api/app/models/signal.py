@@ -14,9 +14,10 @@ class SignalCreate(BaseModel):
     visibility: Visibility = "worldwide"
     contact_intent: ContactIntent = "open_to_conversation"
     tags: list[str] = Field(default_factory=list)
-    # Temporary Phase 2 stand-in for the AI-suggested NOW/OPEN kind (§12 composer).
-    # Replaced by a Groq-suggested value in Phase 3 — kept here only until then.
-    kind: Kind = "NOW"
+
+
+class SignalConfirm(BaseModel):
+    preview_id: str
 
 
 def expires_at_for(kind: Kind, created_at: datetime) -> Optional[datetime]:
@@ -27,39 +28,59 @@ def expires_at_for(kind: Kind, created_at: datetime) -> Optional[datetime]:
     return None  # PROFILE never expires
 
 
-def new_signal_document(
+def build_signal_document(
     *,
     owner_id: str,
-    payload: SignalCreate,
+    raw_text: str,
+    visibility: str,
+    contact_intent: str,
+    tags: list[str],
     region_label: str,
     region_lat: float,
     region_lng: float,
+    intent: Intent,
+    topic: str,
+    kind: Kind,
     is_profile: bool = False,
-    intent: Intent = "other",
-    topic: str = "",
+    links: Optional[list[str]] = None,
 ) -> dict:
     created_at = datetime.now(timezone.utc)
+    effective_kind = "PROFILE" if is_profile else kind
     return {
         "owner_id": owner_id,
         "is_profile": is_profile,
-        "raw_text": payload.raw_text,
-        "kind": "PROFILE" if is_profile else payload.kind,
+        "raw_text": raw_text,
+        "kind": effective_kind,
         "intent": intent,
         "topic": topic,
-        "tags": payload.tags,
-        "links": [],
+        "tags": tags,
+        "links": links or [],
         "region_label": region_label,
         "region_lat": region_lat,
         "region_lng": region_lng,
-        "visibility": payload.visibility,
-        "contact_intent": payload.contact_intent,
+        "visibility": visibility,
+        "contact_intent": contact_intent,
         "status": "active",
         "risk_flags": [],
         "qdrant_point_id": None,
         "created_at": created_at,
-        "expires_at": expires_at_for("PROFILE" if is_profile else payload.kind, created_at),
+        "expires_at": expires_at_for(effective_kind, created_at),
         "resolved_at": None,
         "edited_at": created_at,
+    }
+
+
+def qdrant_payload_for(doc: dict) -> dict:
+    return {
+        "signal_id": str(doc["_id"]),
+        "is_profile": doc["is_profile"],
+        "intent": doc["intent"],
+        "topic": doc["topic"],
+        "tags": doc["tags"],
+        "region_label": doc["region_label"],
+        "contact_intent": doc["contact_intent"],
+        "status": doc["status"],
+        "expires_at": doc["expires_at"].isoformat() if doc.get("expires_at") else None,
     }
 
 

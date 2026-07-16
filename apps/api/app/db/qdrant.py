@@ -28,3 +28,21 @@ async def ping_qdrant() -> bool:
     client = get_qdrant_client()
     await client.get_collections()
     return True
+
+
+async def upsert_signal_point(point_id: str, vector: list[float], payload: dict) -> None:
+    settings = get_settings()
+    client = get_qdrant_client()
+    await client.upsert(
+        collection_name=settings.qdrant_collection,
+        points=[models.PointStruct(id=point_id, vector=vector, payload=payload)],
+    )
+
+
+async def delete_signal_point(point_id: str) -> None:
+    settings = get_settings()
+    client = get_qdrant_client()
+    await client.delete(
+        collection_name=settings.qdrant_collection,
+        points_selector=models.PointIdsList(points=[point_id]),
+    )
