@@ -5,7 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db.qdrant import ensure_collection
-from app.routers import auth, globe, health, search, signals
+from app.routers import auth, connections, conversations, globe, health, profile, search, signals
+from app.services.embeddings import warm_model
 
 settings = get_settings()
 
@@ -14,6 +15,7 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     if settings.qdrant_url:
         await ensure_collection()
+    await warm_model()
     yield
 
 
@@ -32,3 +34,6 @@ app.include_router(auth.router)
 app.include_router(signals.router)
 app.include_router(search.router)
 app.include_router(globe.router)
+app.include_router(profile.router)
+app.include_router(connections.router)
+app.include_router(conversations.router)

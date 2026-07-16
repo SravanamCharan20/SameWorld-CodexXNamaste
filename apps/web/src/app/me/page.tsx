@@ -116,6 +116,12 @@ export default function MePage() {
             >
               explore
             </a>
+            <a
+              href="/connections"
+              className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
+            >
+              connections
+            </a>
             <button
               onClick={logout}
               className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"

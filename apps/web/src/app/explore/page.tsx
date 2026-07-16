@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { clearPersona, getStoredPersona, Persona } from "@/lib/persona";
 import { ActivityItem, GlobePoint, SearchResponse, SearchResult } from "@/lib/types";
+import ConnectButton from "@/components/ConnectButton";
 
 const GlobeCanvas = dynamic(() => import("@/components/GlobeCanvas"), {
   ssr: false,
@@ -166,6 +167,12 @@ export default function ExplorePage() {
           >
             my signals
           </a>
+          <a
+            href="/connections"
+            className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
+          >
+            connections
+          </a>
           <button
             onClick={logout}
             className="text-xs font-mono text-text-secondary hover:text-text-primary transition-colors duration-micro"
@@ -319,7 +326,16 @@ function ResultCard({ result, showLabel }: { result: SearchResult; showLabel: bo
           <span className="text-xs font-mono text-ai-match shrink-0">{result.label}</span>
         )}
       </div>
-      <p className="text-sm text-text-primary">{result.raw_text}</p>
+      <p className="text-sm text-text-primary mb-2">{result.raw_text}</p>
+      <div className="flex items-center gap-3">
+        <a
+          href={`/human/${result.owner_id}`}
+          className="text-xs font-mono text-text-secondary hover:text-ai-match transition-colors duration-micro"
+        >
+          view profile →
+        </a>
+        <ConnectButton signalId={result.signal_id} ownerId={result.owner_id} rationale={result.label} />
+      </div>
     </div>
   );
 }

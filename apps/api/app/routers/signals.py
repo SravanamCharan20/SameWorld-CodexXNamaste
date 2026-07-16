@@ -1,7 +1,9 @@
 import asyncio
 import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.db.mongo import get_db
@@ -18,6 +20,7 @@ from app.models.signal import (
 from app.services.embeddings import embed
 from app.services.intent_extraction import extract_intent
 from app.services.preview_store import delete_preview, get_preview, save_preview
+from app.services.rate_limit import enforce_rate_limit
 from app.services.safety import run_safety_gate
 
 router = APIRouter()
@@ -27,6 +30,7 @@ router = APIRouter()
 async def create_signal(
     payload: SignalCreate, persona_id: str = Depends(get_current_persona_id)
 ):
+    await enforce_rate_limit(persona_id, "signal_create", limit=15)
     db = get_db()
     persona = await db.personas.find_one({"_id": persona_id})
 
@@ -105,6 +109,23 @@ async def confirm_signal(body: SignalConfirm):
     return ok(serialize_signal(doc))
 
 
+@router.post("/signals/{signal_id}/resolve")
+async def resolve_signal(signal_id: str, persona_id: str = Depends(get_current_persona_id)):
+    db = get_db()
+    doc = await db.signals.find_one({"_id": ObjectId(signal_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    if doc["owner_id"] != persona_id:
+        raise HTTPException(status_code=403, detail="Not your signal")
+    resolved_at = datetime.now(timezone.utc)
+    await db.signals.update_one(
+        {"_id": doc["_id"]}, {"$set": {"status": "resolved", "resolved_at": resolved_at}}
+    )
+    doc["status"] = "resolved"
+    doc["resolved_at"] = resolved_at
+    return ok(serialize_signal(doc))
+
+
 @router.get("/signals/mine")
 async def my_signals(
     status: Optional[str] = None, persona_id: str = Depends(get_current_persona_id)
@@ -119,13 +140,20 @@ async def my_signals(
 
 
 @router.get("/signals/browse")
-async def browse_signals(region: Optional[str] = None, tag: Optional[str] = None):
+async def browse_signals(
+    region: Optional[str] = None, tag: Optional[str] = None, owner_id: Optional[str] = None
+):
     db = get_db()
     query: dict = {"status": "active"}
     if region:
         query["region_label"] = region
     if tag:
         query["tags"] = tag
+    if owner_id:
+        # Human Card use case — the profile is already pinned separately, so
+        # exclude it here to avoid showing it twice.
+        query["owner_id"] = owner_id
+        query["is_profile"] = False
     cursor = db.signals.find(query).sort("created_at", -1).limit(50)
     signals = [serialize_signal(doc) async for doc in cursor]
     return ok(signals)

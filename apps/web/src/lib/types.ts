@@ -78,6 +78,10 @@ export type GlobePoint = {
   is_profile: boolean;
 };
 
+export type ProfileUpsertResponse =
+  | { blocked: true; reason: string; risk_flags: string[] }
+  | Signal;
+
 export type ActivityItem = {
   id: string;
   owner_id: string;
@@ -85,5 +89,45 @@ export type ActivityItem = {
   region_label: string;
   kind: SignalKind;
   status: SignalStatus;
+  created_at: string | null;
+};
+
+export type ConnectionStatus = "pending" | "accepted" | "declined";
+
+export type Connection = {
+  id: string;
+  requester_id: string;
+  recipient_id: string;
+  signal_id: string;
+  message: string;
+  rationale: string;
+  status: ConnectionStatus;
+  direction: "incoming" | "outgoing";
+  conversation_id: string | null;
+  created_at: string | null;
+};
+
+export type Message = {
+  sender_id: string;
+  text: string;
+  sent_at: string | null;
+};
+
+export type PinnedContext = {
+  signal_id: string;
+  owner_id: string;
+  raw_text: string;
+  topic: string;
+  is_profile: boolean;
+  rationale: string;
+};
+
+export type Conversation = {
+  id: string;
+  connection_id: string;
+  participant_ids: string[];
+  pinned_context: PinnedContext;
+  messages: Message[];
+  status: "active" | "ended";
   created_at: string | null;
 };

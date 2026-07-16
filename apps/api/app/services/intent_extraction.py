@@ -1,7 +1,7 @@
 import json
 
 from app.config import get_settings
-from app.services.groq_client import get_groq_client
+from app.services.groq_client import create_chat_completion
 
 SYSTEM_PROMPT = """You extract structured metadata from a short text signal for SameWorld's open \
 semantic search index. Given the raw text, return strict JSON only:
@@ -21,8 +21,7 @@ if genuinely nothing fits."""
 
 async def extract_intent(text: str) -> dict:
     settings = get_settings()
-    client = get_groq_client()
-    completion = await client.chat.completions.create(
+    completion = await create_chat_completion(
         model=settings.groq_model,
         temperature=0,
         response_format={"type": "json_object"},

@@ -1,7 +1,7 @@
 import json
 
 from app.config import get_settings
-from app.services.groq_client import get_groq_client
+from app.services.groq_client import create_chat_completion
 
 SYSTEM_PROMPT = """You write short, natural relationship labels explaining why each candidate result is \
 relevant to a search query on SameWorld. Given the query and a numbered list of candidates (their text \
@@ -21,11 +21,10 @@ async def generate_labels(query_text: str, candidates: list[dict]) -> list[str]:
     if not candidates:
         return []
     settings = get_settings()
-    client = get_groq_client()
     numbered = "\n".join(
         f"{i + 1}. [{c['intent']}] {c['raw_text']}" for i, c in enumerate(candidates)
     )
-    completion = await client.chat.completions.create(
+    completion = await create_chat_completion(
         model=settings.groq_model,
         temperature=0.3,
         response_format={"type": "json_object"},

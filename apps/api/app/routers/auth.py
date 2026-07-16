@@ -19,6 +19,14 @@ async def list_personas():
     return ok(personas)
 
 
+@router.get("/personas/{persona_id}")
+async def get_persona(persona_id: str):
+    persona = await get_db().personas.find_one({"_id": persona_id})
+    if not persona:
+        raise HTTPException(status_code=404, detail="Unknown persona_id")
+    return ok(serialize_persona(persona))
+
+
 @router.post("/auth/persona-login")
 async def persona_login(body: PersonaLoginRequest):
     persona = await get_db().personas.find_one({"_id": body.persona_id})

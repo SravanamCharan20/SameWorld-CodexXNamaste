@@ -1,7 +1,7 @@
 import json
 
 from app.config import get_settings
-from app.services.groq_client import get_groq_client
+from app.services.groq_client import create_chat_completion
 
 SYSTEM_PROMPT = """You extract advisory search metadata from a free-text query on SameWorld, an open \
 human-intent search engine. Given the query, return strict JSON only:
@@ -19,8 +19,7 @@ guess rather than refusing."""
 
 async def understand_query(query_text: str) -> dict:
     settings = get_settings()
-    client = get_groq_client()
-    completion = await client.chat.completions.create(
+    completion = await create_chat_completion(
         model=settings.groq_model,
         temperature=0,
         response_format={"type": "json_object"},

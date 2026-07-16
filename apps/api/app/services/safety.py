@@ -1,7 +1,7 @@
 import json
 
 from app.config import get_settings
-from app.services.groq_client import get_groq_client
+from app.services.groq_client import create_chat_completion
 
 SYSTEM_PROMPT = """You are the safety-gate classifier for SameWorld, a platform where people post short \
 text signals: needs, questions, opinions, plans, banter. Your job is to block genuine harm, not \
@@ -22,8 +22,7 @@ risk_flags must only contain values from ["harassment", "spam", "doxxing"], empt
 
 async def run_safety_gate(text: str) -> dict:
     settings = get_settings()
-    client = get_groq_client()
-    completion = await client.chat.completions.create(
+    completion = await create_chat_completion(
         model=settings.groq_model,
         temperature=0,
         response_format={"type": "json_object"},

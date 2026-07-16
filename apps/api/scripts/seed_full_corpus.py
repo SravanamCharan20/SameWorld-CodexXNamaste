@@ -252,7 +252,7 @@ async def seed_personas():
 
 
 async def seed_signals():
-    async with httpx.AsyncClient(base_url=API_BASE, timeout=60) as client:
+    async with httpx.AsyncClient(base_url=API_BASE, timeout=900) as client:
         for i, (persona_id, name, region_label, _lat, _lng, theme, text) in enumerate(ROWS, 1):
             result = await post_signal(client, persona_id, text)
             print(f"[{i}/{len(ROWS)}] {theme:12s} {name:10s} -> {result['status']}")
