@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     upstash_redis_token: str = ""
 
     groq_api_key: str = ""
+    # Comma-separated extra keys, tried in order when the primary key hits its
+    # rate limit — round-robins across all keys before falling back to waiting.
+    groq_fallback_api_keys: str = ""
     groq_model: str = "llama-3.3-70b-versatile"
 
     embedding_model_name: str = "sentence-transformers/all-MiniLM-L6-v2"
