@@ -11,6 +11,7 @@ import type { GlobePoint } from "@/lib/types";
 const NOW_COLOR = "#22C55E";
 const OPEN_COLOR = "#F5B822";
 const AI_MATCH_COLOR = "#818CF8";
+const MINE_COLOR = "#A78BFA";
 const DIM_COLOR = "#3a3d4a";
 
 type LandFeature = {
@@ -29,21 +30,91 @@ export type GlobeCanvasProps = {
   highlightedIds: Set<string>;
   dimmed: boolean;
   focusTarget: { lat: number; lng: number } | null;
-  onPointClick?: (point: GlobePoint) => void;
+  origin?: { lat: number; lng: number } | null;
+  ownPersonaId?: string;
+  onPointClick?: (point: GlobePoint, event: MouseEvent) => void;
+  onClusterClick?: (regionLabel: string, event: MouseEvent) => void;
 };
 
-type RenderPoint = GlobePoint & { layer: "halo" | "core"; dimmed: boolean; highlighted: boolean };
+type ClusterMarker = {
+  id: string;
+  lat: number;
+  lng: number;
+  region_label: string;
+  count: number;
+  dominant: "NOW" | "OPEN";
+  mine: boolean;
+};
+
+// Signals from the same persona (or region) share one fixed home coordinate,
+// so several points can sit at the exact same lat/lng — previously this
+// rendered as an overlapping "flower" of jittered dots, which is exactly the
+// visual clutter that got flagged. Instead, a shared coordinate collapses
+// into a single sized-by-count cluster marker; clicking it opens the (already
+// solid) Browse Nearby panel scoped to that region instead of trying to
+// cram N tiny dots into a few pixels of globe surface.
+function clusterPoints(
+  points: GlobePoint[],
+  ownPersonaId: string | undefined
+): { solo: GlobePoint[]; clusters: ClusterMarker[] } {
+  const groups = new Map<string, GlobePoint[]>();
+  for (const p of points) {
+    const key = `${p.lat.toFixed(3)},${p.lng.toFixed(3)}`;
+    const group = groups.get(key);
+    if (group) group.push(p);
+    else groups.set(key, [p]);
+  }
+  const solo: GlobePoint[] = [];
+  const clusters: ClusterMarker[] = [];
+  for (const group of Array.from(groups.values())) {
+    if (group.length === 1) {
+      solo.push(group[0]);
+      continue;
+    }
+    const lat = group.reduce((sum, p) => sum + p.lat, 0) / group.length;
+    const lng = group.reduce((sum, p) => sum + p.lng, 0) / group.length;
+    const nowCount = group.filter((p) => p.kind === "NOW").length;
+    clusters.push({
+      id: `cluster:${group[0].lat.toFixed(3)},${group[0].lng.toFixed(3)}`,
+      lat,
+      lng,
+      region_label: group[0].region_label,
+      count: group.length,
+      dominant: nowCount > group.length / 2 ? "NOW" : "OPEN",
+      mine: !!ownPersonaId && group.some((p) => p.owner_id === ownPersonaId && !p.is_profile),
+    });
+  }
+  return { solo, clusters };
+}
+
+type RenderPoint =
+  | (GlobePoint & { variant: "halo" | "core"; dimmed: boolean; highlighted: boolean; mine: boolean })
+  | (ClusterMarker & { variant: "cluster" });
 
 export default function GlobeCanvas({
-  points,
+  points: rawPoints,
   highlightedIds,
   dimmed,
   focusTarget,
+  origin,
+  ownPersonaId,
   onPointClick,
+  onClusterClick,
 }: GlobeCanvasProps) {
   const globeRef = useRef<GlobeMethods | undefined>(undefined);
   const [ready, setReady] = useState(false);
   const [pulseIds, setPulseIds] = useState<string[]>([]);
+  const focusTargetRef = useRef(focusTarget);
+  focusTargetRef.current = focusTarget;
+
+  // Clustering is skipped while a search is active — matched results need to
+  // stay individually visible (and each one needs its own arc landing on it),
+  // so collapsing them into a count marker would hide exactly what the user
+  // just searched for.
+  const { solo: points, clusters } = useMemo(
+    () => (highlightedIds.size > 0 ? { solo: rawPoints, clusters: [] } : clusterPoints(rawPoints, ownPersonaId)),
+    [rawPoints, highlightedIds, ownPersonaId]
+  );
 
   const globeMaterial = useMemo(
     () => new THREE.MeshPhongMaterial({ color: "#0b0d16", shininess: 6 }),
@@ -65,11 +136,14 @@ export default function GlobeCanvas({
   useEffect(() => {
     if (!globeRef.current || !ready) return;
     if (focusTarget) {
-      globeRef.current.controls().autoRotate = false;
       globeRef.current.pointOfView({ ...focusTarget, altitude: 1.6 }, 800);
-    } else {
-      globeRef.current.controls().autoRotate = true;
     }
+  }, [focusTarget, ready]);
+
+  useEffect(() => {
+    const globe = globeRef.current;
+    if (!globe || !ready) return;
+    globe.controls().autoRotate = !focusTarget;
   }, [focusTarget, ready]);
 
   useEffect(() => {
@@ -86,36 +160,57 @@ export default function GlobeCanvas({
     const out: RenderPoint[] = [];
     for (const p of points) {
       const highlighted = highlightedIds.has(p.id);
-      const isDimmed = dimmed && !highlighted;
-      out.push({ ...p, layer: "halo", dimmed: isDimmed, highlighted });
-      out.push({ ...p, layer: "core", dimmed: isDimmed, highlighted });
+      // The permanent profile signal doesn't count as "mine" here — this
+      // marker is for the signals you actively post (NOW/OPEN), not the
+      // always-on profile, so it actually means something when it shows up.
+      const mine = !!ownPersonaId && p.owner_id === ownPersonaId && !p.is_profile;
+      const isDimmed = dimmed && !highlighted && !mine;
+      out.push({ ...p, variant: "halo", dimmed: isDimmed, highlighted, mine });
+      out.push({ ...p, variant: "core", dimmed: isDimmed, highlighted, mine });
+    }
+    for (const c of clusters) {
+      out.push({ ...c, variant: "cluster" });
     }
     return out;
-  }, [points, highlightedIds, dimmed]);
+  }, [points, clusters, highlightedIds, dimmed, ownPersonaId]);
+
+  const myPoints = useMemo(
+    () => (ownPersonaId ? points.filter((p) => p.owner_id === ownPersonaId && !p.is_profile) : []),
+    [points, ownPersonaId]
+  );
 
   const ringsData = useMemo(() => {
-    const source = highlightedIds.size > 0 ? points.filter((p) => highlightedIds.has(p.id)) : points.filter((p) => pulseIds.includes(p.id));
-    return source.map((p) => ({
+    const pulseSource = highlightedIds.size > 0 ? points.filter((p) => highlightedIds.has(p.id)) : points.filter((p) => pulseIds.includes(p.id));
+    const rings = pulseSource.map((p) => ({
       lat: p.lat,
       lng: p.lng,
       color: p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR,
     }));
-  }, [points, pulseIds, highlightedIds]);
-
-  const arcsData = useMemo(() => {
-    if (highlightedIds.size < 2) return [];
-    const highlighted = points.filter((p) => highlightedIds.has(p.id));
-    const arcs = [];
-    for (let i = 0; i < highlighted.length - 1; i++) {
-      arcs.push({
-        startLat: highlighted[i].lat,
-        startLng: highlighted[i].lng,
-        endLat: highlighted[i + 1].lat,
-        endLng: highlighted[i + 1].lng,
-      });
+    // Your own signals always carry a slow, distinct violet ring so you can
+    // always find yourself on the globe — not just right after posting.
+    for (const p of myPoints) {
+      if (highlightedIds.has(p.id)) continue;
+      rings.push({ lat: p.lat, lng: p.lng, color: MINE_COLOR });
     }
-    return arcs;
-  }, [points, highlightedIds]);
+    for (const c of clusters) {
+      if (c.mine) rings.push({ lat: c.lat, lng: c.lng, color: MINE_COLOR });
+    }
+    return rings;
+  }, [points, pulseIds, highlightedIds, myPoints, clusters]);
+
+  // Arcs represent your search reaching out across the world: they fan out
+  // from your own location to every matched result, not between the
+  // (unrelated) results themselves.
+  const arcsData = useMemo(() => {
+    if (highlightedIds.size === 0 || !origin) return [];
+    const highlighted = points.filter((p) => highlightedIds.has(p.id));
+    return highlighted.map((p) => ({
+      startLat: origin.lat,
+      startLng: origin.lng,
+      endLat: p.lat,
+      endLng: p.lng,
+    }));
+  }, [points, highlightedIds, origin]);
 
   return (
     <Globe
@@ -137,18 +232,29 @@ export default function GlobeCanvas({
       pointLng="lng"
       pointAltitude={(d) => {
         const p = d as RenderPoint;
-        return p.layer === "core" ? (p.highlighted ? 0.02 : 0.012) : 0.004;
+        if (p.variant === "cluster") return 0.018;
+        if (p.variant !== "core") return 0.004;
+        if (p.mine) return 0.024;
+        return p.highlighted ? 0.02 : 0.012;
       }}
       pointRadius={(d) => {
         const p = d as RenderPoint;
-        if (p.layer === "halo") return p.highlighted ? 1.1 : 0.75;
-        return p.highlighted ? 0.55 : 0.32;
+        if (p.variant === "cluster") return Math.min(0.55 + Math.sqrt(p.count) * 0.22, 1.7);
+        if (p.variant === "halo") return p.mine ? 1.3 : p.highlighted ? 1.1 : 0.75;
+        return p.mine ? 0.62 : p.highlighted ? 0.55 : 0.32;
       }}
       pointColor={(d) => {
         const p = d as RenderPoint;
+        if (p.variant === "cluster") {
+          if (p.mine) return MINE_COLOR;
+          return p.dominant === "NOW" ? NOW_COLOR : OPEN_COLOR;
+        }
         const base = p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR;
-        if (p.dimmed) return p.layer === "halo" ? "rgba(58,61,74,0.15)" : DIM_COLOR;
-        if (p.layer === "halo") {
+        if (p.mine) {
+          return p.variant === "halo" ? hexToRgba(MINE_COLOR, 0.4) : MINE_COLOR;
+        }
+        if (p.dimmed) return p.variant === "halo" ? "rgba(58,61,74,0.15)" : DIM_COLOR;
+        if (p.variant === "halo") {
           return p.highlighted
             ? hexToRgba(AI_MATCH_COLOR, 0.35)
             : hexToRgba(base, 0.18);
@@ -157,16 +263,53 @@ export default function GlobeCanvas({
       }}
       pointLabel={(d) => {
         const p = d as RenderPoint;
-        if (p.layer !== "core") return "";
+        if (p.variant === "cluster") {
+          return `<div style="font-family: var(--font-mono, monospace); font-size: 11px; background: #17171A; border: 1px solid #26262B; border-radius: 8px; padding: 8px 10px; color: #F2F2F5; max-width: 220px;">
+            <div style="color: ${p.mine ? MINE_COLOR : "#F2F2F5"}; font-weight: 600; margin-bottom: 2px;">${p.count} signals · ${escapeHtml(p.region_label)}</div>
+            ${onClusterClick ? '<div style="color: #6b6c7a; font-size: 10px;">click to browse this region →</div>' : ""}
+          </div>`;
+        }
+        if (p.variant !== "core") return "";
         return `<div style="font-family: var(--font-mono, monospace); font-size: 11px; background: #17171A; border: 1px solid #26262B; border-radius: 8px; padding: 8px 10px; color: #F2F2F5; max-width: 220px;">
-          <div style="color: ${p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR}; font-weight: 600; margin-bottom: 2px;">${p.kind} · ${p.region_label}</div>
-          <div style="color: #9A9BAA;">${escapeHtml(p.topic)}</div>
+          <div style="color: ${p.mine ? MINE_COLOR : p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR}; font-weight: 600; margin-bottom: 2px;">${p.mine ? "YOU · " : ""}${p.kind} · ${p.region_label}</div>
+          <div style="color: #9A9BAA; margin-bottom: 4px;">${escapeHtml(p.topic)}</div>
+          ${onPointClick ? '<div style="color: #6b6c7a; font-size: 10px;">click to view →</div>' : ""}
         </div>`;
       }}
-      onPointClick={(d) => {
+      onPointClick={(d, event) => {
         const p = d as RenderPoint;
-        if (p.layer === "core" && onPointClick) onPointClick(p);
+        if (p.variant === "cluster") {
+          onClusterClick?.(p.region_label, event);
+          return;
+        }
+        if (p.variant === "core" && onPointClick) onPointClick(p, event);
       }}
+      onPointHover={(d) => {
+        // Mutates the Three.js controls object directly (no React state) —
+        // rotation pauses only while the pointer is over an actual pin and
+        // resumes the instant it leaves, without a setState-during-mount
+        // warning thrashing the dynamically-imported globe.
+        const p = d as RenderPoint | null;
+        const isPin = !!p && (p.variant === "core" || p.variant === "cluster");
+        const isCore = !!p && p.variant === "core" && !!onPointClick;
+        const isCluster = !!p && p.variant === "cluster" && !!onClusterClick;
+        const globe = globeRef.current;
+        if (globe) {
+          globe.controls().autoRotate = !isPin && !focusTargetRef.current;
+        }
+        const canvas = globe?.renderer()?.domElement;
+        if (canvas) canvas.style.cursor = isCore || isCluster ? "pointer" : "default";
+      }}
+      labelsData={clusters}
+      labelLat="lat"
+      labelLng="lng"
+      labelText={(d) => String((d as ClusterMarker).count)}
+      labelSize={1.3}
+      labelColor={() => "#0e0e10"}
+      labelAltitude={0.021}
+      labelIncludeDot={false}
+      labelResolution={3}
+      labelDotOrientation={() => "bottom"}
       ringsData={ringsData}
       ringLat="lat"
       ringLng="lng"

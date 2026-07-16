@@ -2,12 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Compass, Inbox, Check, X, MessageCircle } from "lucide-react";
+import { Inbox, Check, X, MessageCircle } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
 import { Connection } from "@/lib/types";
+import AppHeader from "@/components/AppHeader";
+import PageHeading from "@/components/PageHeading";
+import Avatar from "@/components/Avatar";
 
 type Tab = "incoming" | "outgoing" | "accepted";
+type PersonaInfo = { id: string; display_name: string; region_label: string };
+
+// Which persona is "the other side" of a connection is a property of the
+// connection itself (direction), not of which tab you happen to be viewing —
+// using the tab for this was a latent bug: on the Accepted tab (which mixes
+// both directions), it silently linked incoming connections' "view profile"
+// to your own profile instead of theirs.
+function otherPersonaId(c: Connection): string {
+  return c.direction === "incoming" ? c.requester_id : c.recipient_id;
+}
 
 export default function ConnectionsPage() {
   const router = useRouter();
@@ -15,6 +28,7 @@ export default function ConnectionsPage() {
   const [tab, setTab] = useState<Tab>("incoming");
   const [connections, setConnections] = useState<Connection[] | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [people, setPeople] = useState<Record<string, PersonaInfo>>({});
 
   useEffect(() => {
     const stored = getStoredPersona();
@@ -29,6 +43,24 @@ export default function ConnectionsPage() {
     if (persona) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [persona, tab]);
+
+  // Every card used to show only a rationale string and a message with no
+  // indication of WHO — this fetches (and caches) the other participant's
+  // name/region for every connection on screen so each card can say plainly
+  // who it's with.
+  useEffect(() => {
+    if (!connections) return;
+    const missing = Array.from(new Set(connections.map(otherPersonaId))).filter((id) => !people[id]);
+    if (missing.length === 0) return;
+    Promise.all(missing.map((id) => apiFetch<PersonaInfo>(`/personas/${id}`))).then((results) => {
+      setPeople((prev) => {
+        const next = { ...prev };
+        for (const res of results) if (res.data) next[res.data.id] = res.data;
+        return next;
+      });
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connections]);
 
   async function load() {
     if (!persona) return;
@@ -70,18 +102,10 @@ export default function ConnectionsPage() {
   };
 
   return (
-    <main className="min-h-screen px-4 py-12">
-      <div className="w-full max-w-lg mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="font-heading font-bold text-xl tracking-tight">
-            SAME<span className="text-ai-match">WORLD</span>
-          </h1>
-          <a href="/explore" className="link-muted flex items-center gap-1.5">
-            <Compass size={13} />
-            explore
-          </a>
-        </div>
-
+    <main className="min-h-screen">
+      <AppHeader persona={persona} active="connections" />
+      <div className="w-full max-w-lg mx-auto px-4 py-8">
+        <PageHeading title="Connections" subtitle="Requests you've sent, received, and accepted." />
         <div className="flex gap-1 mb-6 border-b border-border">
           {(["incoming", "outgoing", "accepted"] as Tab[]).map((t) => (
             <button
@@ -112,52 +136,82 @@ export default function ConnectionsPage() {
               <p className="text-sm text-text-secondary">{emptyCopy[tab]}</p>
             </div>
           )}
-          {connections?.map((c) => (
-            <div key={c.id} className="card-base p-4">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-mono text-ai-match">{c.rationale}</span>
-                <span className="text-xs font-mono text-text-secondary capitalize">{c.status}</span>
-              </div>
-              <p className="text-sm text-text-primary mb-2">{c.message}</p>
-              <a
-                href={`/human/${tab === "incoming" ? c.requester_id : c.recipient_id}`}
-                className="link-muted hover:!text-ai-match"
+          {connections?.map((c) => {
+            const hasConversation = c.status === "accepted" && c.conversation_id;
+            const otherId = otherPersonaId(c);
+            const other = people[otherId];
+            const otherName = other?.display_name ?? "…";
+            return (
+              <div
+                key={c.id}
+                className={hasConversation ? "card-interactive p-4" : "card-base p-4"}
               >
-                view profile →
-              </a>
-
-              {tab === "incoming" && c.status === "pending" && (
-                <div className="flex gap-2 mt-3">
-                  <button
-                    onClick={() => respond(c.id, "accept")}
-                    disabled={busyId === c.id}
-                    className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1"
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <a
+                    href={`/human/${otherId}`}
+                    className="flex items-center gap-2.5 min-w-0 no-underline hover:opacity-80 transition-opacity"
                   >
-                    <Check size={13} />
-                    Accept
-                  </button>
-                  <button
-                    onClick={() => respond(c.id, "decline")}
-                    disabled={busyId === c.id}
-                    className="btn-secondary px-4 py-1.5 text-xs flex items-center gap-1"
+                    <Avatar name={otherName} size={30} />
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-text-primary truncate">{otherName}</p>
+                      <p className="text-xs font-mono text-ai-match truncate">{c.rationale}</p>
+                    </div>
+                  </a>
+                  <span
+                    className={`badge shrink-0 ${
+                      c.status === "accepted"
+                        ? "bg-now/15 text-now"
+                        : c.status === "declined"
+                        ? "bg-white/5 text-text-secondary"
+                        : "bg-open/15 text-open"
+                    }`}
                   >
-                    <X size={13} />
-                    Decline
-                  </button>
+                    {c.status}
+                  </span>
                 </div>
-              )}
 
-              {c.status === "accepted" && c.conversation_id && (
-                <a
-                  href={`/conversation/${c.conversation_id}`}
-                  className="link-muted hover:!text-ai-match inline-flex items-center gap-1 mt-3"
-                >
-                  <MessageCircle size={13} />
-                  open conversation
-                </a>
-              )}
-            </div>
-          ))}
+                <p className="text-[11px] font-mono text-text-secondary mb-1">
+                  {c.direction === "incoming" ? `${otherName} said` : "You said"}
+                </p>
+                <p className="text-sm text-text-primary mb-3">{c.message}</p>
+
+                {hasConversation ? (
+                  <a
+                    href={`/conversation/${c.conversation_id}`}
+                    className="btn-primary w-full justify-center py-2 text-xs flex items-center gap-1.5"
+                  >
+                    <MessageCircle size={14} />
+                    Open conversation
+                  </a>
+                ) : (
+                  <a href={`/human/${otherId}`} className="link-muted hover:!text-ai-match">
+                    view profile →
+                  </a>
+                )}
+
+                {tab === "incoming" && c.status === "pending" && (
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => respond(c.id, "accept")}
+                      disabled={busyId === c.id}
+                      className="btn-primary px-4 py-1.5 text-xs flex items-center gap-1"
+                    >
+                      <Check size={13} />
+                      Accept
+                    </button>
+                    <button
+                      onClick={() => respond(c.id, "decline")}
+                      disabled={busyId === c.id}
+                      className="btn-secondary px-4 py-1.5 text-xs flex items-center gap-1"
+                    >
+                      <X size={13} />
+                      Decline
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </main>

@@ -19,17 +19,21 @@ async def globe_state():
             "topic": 1,
             "raw_text": 1,
             "is_profile": 1,
+            "owner_id": 1,
+            "created_at": 1,
         },
     )
     points = [
         {
             "id": str(doc["_id"]),
+            "owner_id": doc["owner_id"],
             "lat": doc["region_lat"],
             "lng": doc["region_lng"],
             "region_label": doc["region_label"],
             "kind": doc["kind"],
             "topic": doc.get("topic") or doc["raw_text"][:60],
             "is_profile": doc["is_profile"],
+            "created_at": doc["created_at"].isoformat() if doc.get("created_at") else None,
         }
         async for doc in cursor
     ]

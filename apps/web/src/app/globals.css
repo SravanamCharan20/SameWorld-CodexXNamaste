@@ -20,27 +20,40 @@ body {
    input, link, and card gets the same default/hover/active/focus/disabled
    states instead of each screen inventing its own. */
 @layer components {
+  /* Every button gets a real filled/raised surface at rest, not just on
+     hover — a border-only or transparent button reads as a text label until
+     the pointer happens to land on it. Solid fill + shadow + hover lift is
+     what makes something unmistakably a button instead of a caption.
+     cursor-pointer is explicit throughout: Safari's UA stylesheet leaves
+     native <button> at the default arrow cursor (only <a> gets a pointer for
+     free), which silently kills the "this is clickable" cue for Safari. */
   .btn-primary {
-    @apply rounded-pill bg-ai-match text-background text-sm font-medium px-6 py-2
+    @apply rounded-pill bg-ai-match text-background text-sm font-semibold px-6 py-2.5 cursor-pointer
+           shadow-[0_2px_10px_rgba(129,140,248,0.35)]
            transition-all duration-micro ease-out-expo
-           hover:brightness-110 active:brightness-95 active:scale-[0.98]
-           disabled:opacity-40 disabled:pointer-events-none
+           hover:brightness-110 hover:shadow-[0_4px_16px_rgba(129,140,248,0.5)] hover:-translate-y-px
+           active:translate-y-0 active:brightness-95 active:scale-[0.98]
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:shadow-none
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-match focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
   .btn-secondary {
-    @apply rounded-pill border border-border text-text-secondary text-sm font-medium px-6 py-2
+    @apply rounded-pill bg-surface border border-border text-text-primary text-sm font-semibold px-6 py-2.5 cursor-pointer
+           shadow-[0_1px_4px_rgba(0,0,0,0.3)]
            transition-all duration-micro ease-out-expo
-           hover:text-text-primary hover:border-text-secondary active:brightness-95
-           disabled:opacity-40 disabled:pointer-events-none
+           hover:bg-white/[0.07] hover:border-text-secondary/60 hover:-translate-y-px hover:shadow-[0_2px_10px_rgba(0,0,0,0.4)]
+           active:translate-y-0 active:brightness-95
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:shadow-none
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ai-match focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
   .btn-danger {
-    @apply rounded-pill border border-red-500/40 text-red-400 text-sm font-medium px-6 py-2
+    @apply rounded-pill bg-red-500/15 border border-red-500/40 text-red-400 text-sm font-semibold px-6 py-2.5 cursor-pointer
+           shadow-[0_1px_4px_rgba(0,0,0,0.3)]
            transition-all duration-micro ease-out-expo
-           hover:bg-red-500/10 hover:border-red-500 active:brightness-95
-           disabled:opacity-40 disabled:pointer-events-none
+           hover:bg-red-500/25 hover:border-red-500/70 hover:-translate-y-px hover:shadow-[0_2px_10px_rgba(239,68,68,0.25)]
+           active:translate-y-0 active:brightness-95
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:shadow-none
            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 
@@ -56,21 +69,73 @@ body {
   }
 
   .card-interactive {
-    @apply card-base hover:shadow-[0_4px_20px_rgba(0,0,0,0.35)] hover:border-text-secondary/30;
+    @apply card-base hover:shadow-[0_4px_20px_rgba(0,0,0,0.35)] hover:border-text-secondary/30 hover:border-l-2 hover:border-l-ai-match;
   }
 
+  /* Underline is persistent (not hover-only) — a color-only hover cue reads
+     as plain text until the pointer happens to land on it, which is exactly
+     the "nothing looks clickable" complaint. Dotted-to-solid on hover keeps
+     it readable at rest while still signaling interactivity. */
   .link-muted {
-    @apply text-xs font-mono text-text-secondary transition-colors duration-micro
-           hover:text-text-primary
+    @apply text-xs font-mono text-text-secondary underline decoration-dotted decoration-text-secondary/50 underline-offset-2 cursor-pointer
+           transition-colors duration-micro
+           hover:text-text-primary hover:decoration-solid hover:decoration-text-primary
            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ai-match rounded-sm;
   }
 
   .tab-item {
-    @apply px-4 py-2 text-sm capitalize border-b-2 transition-colors duration-micro
+    @apply px-4 py-2.5 text-sm font-medium capitalize border-b-2 cursor-pointer transition-colors duration-micro
+           hover:text-text-primary hover:bg-white/[0.04]
            focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ai-match rounded-t-sm;
   }
 
   .skeleton {
     @apply animate-pulse bg-border/60 rounded-card;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-pill px-2.5 py-1 text-[10px] font-mono font-medium uppercase tracking-wide shrink-0;
+  }
+
+  .badge-now {
+    @apply badge bg-now/15 text-now;
+  }
+
+  .badge-open {
+    @apply badge bg-open/15 text-open;
+  }
+
+  .badge-profile {
+    @apply badge bg-ai-match/15 text-ai-match;
+  }
+
+  .badge-mine {
+    @apply badge bg-[#A78BFA]/15 text-[#A78BFA];
+  }
+
+  /* Standalone pill button — used for the header nav (each item is its own
+     button now, not a bare hover-only item inside a shared strip) and
+     anywhere else a compact filled button is needed. */
+  .nav-pill {
+    @apply inline-flex items-center gap-1.5 rounded-pill bg-surface border border-border px-3 py-1.5 text-xs font-mono font-medium text-text-secondary cursor-pointer
+           shadow-[0_1px_3px_rgba(0,0,0,0.3)]
+           transition-all duration-micro no-underline
+           hover:text-text-primary hover:bg-white/[0.07] hover:border-text-secondary/50 hover:-translate-y-px
+           active:translate-y-0
+           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ai-match;
+  }
+
+  /* A filled pill for one-off actions inside a card (resolve, connect,
+     report…). These used to share .link-muted with plain navigation links —
+     an underline alone doesn't read as "button" the way a solid fill does,
+     which is exactly what got flagged as "not clickable". */
+  .btn-chip {
+    @apply inline-flex items-center gap-1 rounded-pill bg-surface border border-border px-2.5 py-1.5 text-xs font-mono font-medium text-text-secondary cursor-pointer
+           shadow-[0_1px_3px_rgba(0,0,0,0.3)]
+           transition-all duration-micro
+           hover:text-text-primary hover:border-text-secondary/60 hover:bg-white/[0.07] hover:-translate-y-px
+           active:translate-y-0
+           disabled:opacity-40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:shadow-none
+           focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ai-match;
   }
 }

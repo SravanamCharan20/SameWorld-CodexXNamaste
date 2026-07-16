@@ -53,7 +53,7 @@ export default function ConnectButton({
 
   if (!open) {
     return (
-      <button onClick={() => setOpen(true)} className="link-muted hover:!text-ai-match flex items-center gap-1">
+      <button onClick={() => setOpen(true)} className="btn-chip hover:!text-ai-match hover:!border-ai-match/70">
         <UserPlus size={13} />
         connect
       </button>

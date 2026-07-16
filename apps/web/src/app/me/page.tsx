@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Compass, Users, LogOut, ShieldAlert, Sparkles, Inbox, CheckCircle2, UserCircle2 } from "lucide-react";
+import { ShieldAlert, Sparkles, Inbox, CheckCircle2 } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
-import { clearPersona, getStoredPersona, Persona } from "@/lib/persona";
+import { getStoredPersona, Persona } from "@/lib/persona";
 import { Signal, SignalPreview } from "@/lib/types";
+import AppHeader from "@/components/AppHeader";
+import PageHeading from "@/components/PageHeading";
 
 const INTENT_LABELS: Record<string, string> = {
   need: "a need",
@@ -103,45 +105,13 @@ export default function MePage() {
     setPreview(null);
   }
 
-  function logout() {
-    clearPersona();
-    router.push("/login");
-  }
-
   if (!persona) return null;
 
   return (
-    <main className="min-h-screen px-4 py-12">
-      <div className="w-full max-w-lg mx-auto">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            <h1 className="font-heading font-bold text-xl tracking-tight">
-              SAME<span className="text-ai-match">WORLD</span>
-            </h1>
-            <div className="flex items-center gap-3.5">
-              <a href="/explore" className="link-muted flex items-center gap-1.5 whitespace-nowrap">
-                <Compass size={13} />
-                explore
-              </a>
-              <a href={`/human/${persona.id}`} className="link-muted flex items-center gap-1.5 whitespace-nowrap">
-                <UserCircle2 size={13} />
-                my card
-              </a>
-              <a href="/connections" className="link-muted flex items-center gap-1.5 whitespace-nowrap">
-                <Users size={13} />
-                connections
-              </a>
-              <button onClick={logout} className="link-muted flex items-center gap-1.5 whitespace-nowrap">
-                <LogOut size={13} />
-                switch
-              </button>
-            </div>
-          </div>
-          <p className="text-sm text-text-secondary font-mono mt-1">
-            {persona.display_name} · {persona.region_label}
-          </p>
-        </div>
-
+    <main className="min-h-screen">
+      <AppHeader persona={persona} active="signals" />
+      <div className="w-full max-w-lg mx-auto px-4 py-8">
+        <PageHeading title="My Signals" subtitle="What you're posting to the world right now." />
         <div className="card-base p-4 mb-8">
           <form onSubmit={analyze}>
             <textarea
@@ -184,7 +154,7 @@ export default function MePage() {
                 This didn&apos;t clear the safety gate.
               </p>
               <p className="text-xs text-text-secondary font-mono mt-1">{preview.reason}</p>
-              <button onClick={discardPreview} className="link-muted mt-3">
+              <button onClick={discardPreview} className="btn-chip mt-3">
                 edit and try again
               </button>
             </div>
@@ -197,13 +167,11 @@ export default function MePage() {
                 AI preview
               </p>
               <div className="flex items-center gap-2 mb-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    preview.suggested_kind === "NOW" ? "bg-now" : "bg-open"
-                  }`}
-                />
+                <span className={preview.suggested_kind === "NOW" ? "badge-now" : "badge-open"}>
+                  {preview.suggested_kind}
+                </span>
                 <span className="text-sm text-text-primary">
-                  Reads as {INTENT_LABELS[preview.intent]} · {preview.suggested_kind}
+                  Reads as {INTENT_LABELS[preview.intent]}
                 </span>
               </div>
               <p className="text-xs text-text-secondary mb-2">{preview.topic}</p>
@@ -231,7 +199,7 @@ export default function MePage() {
           )}
         </div>
 
-        <h2 className="text-sm text-text-secondary mb-3">My Signals</h2>
+        <h2 className="text-sm font-medium text-text-secondary mb-3">Your history</h2>
         <div className="space-y-2">
           {signals === null && (
             <div className="space-y-2">
@@ -248,28 +216,28 @@ export default function MePage() {
           )}
           {signals?.map((s) => (
             <div key={s.id} className="card-base p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between mb-2 gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <span
-                    className={`h-2 w-2 rounded-full ${
+                    className={
                       s.status === "resolved"
-                        ? "bg-resolved"
+                        ? "badge bg-resolved/15 text-resolved"
                         : s.kind === "PROFILE"
-                        ? "bg-ai-match"
+                        ? "badge-profile"
                         : s.kind === "NOW"
-                        ? "bg-now"
-                        : "bg-open"
-                    }`}
-                  />
-                  <span className="text-xs font-mono text-text-secondary">
-                    {s.kind} · {s.intent} · {s.status}
+                        ? "badge-now"
+                        : "badge-open"
+                    }
+                  >
+                    {s.status === "resolved" ? "resolved" : s.kind}
                   </span>
+                  <span className="text-xs text-text-secondary truncate">{s.intent}</span>
                 </div>
                 {s.status === "active" && !s.is_profile && (
                   <button
                     onClick={() => resolve(s.id)}
                     disabled={resolvingId === s.id}
-                    className="link-muted flex items-center gap-1 hover:!text-now disabled:opacity-40"
+                    className="btn-chip hover:!text-now hover:!border-now/70"
                   >
                     <CheckCircle2 size={13} />
                     {resolvingId === s.id ? "…" : "resolve"}

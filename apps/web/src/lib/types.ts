@@ -70,12 +70,14 @@ export type SearchResponse = {
 
 export type GlobePoint = {
   id: string;
+  owner_id: string;
   lat: number;
   lng: number;
   region_label: string;
   kind: SignalKind;
   topic: string;
   is_profile: boolean;
+  created_at: string | null;
 };
 
 export type ProfileUpsertResponse =

@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { UserCircle2, Compass, ShieldAlert, CheckCircle2, Save } from "lucide-react";
+import { ShieldAlert, CheckCircle2, Save } from "lucide-react";
 import { apiFetch, personaHeaders } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
 import { ContactIntent, ProfileUpsertResponse, Signal, Visibility } from "@/lib/types";
+import AppHeader from "@/components/AppHeader";
+import PageHeading from "@/components/PageHeading";
 
 export default function ProfileEditPage() {
   const router = useRouter();
@@ -74,32 +76,13 @@ export default function ProfileEditPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-12">
-      <div className="w-full max-w-lg mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="font-heading font-bold text-xl tracking-tight">
-            SAME<span className="text-ai-match">WORLD</span>
-          </h1>
-          <div className="flex items-center gap-4">
-            <a href={`/human/${persona.id}`} className="link-muted flex items-center gap-1.5">
-              <UserCircle2 size={13} />
-              view my card
-            </a>
-            <a href="/explore" className="link-muted flex items-center gap-1.5">
-              <Compass size={13} />
-              explore
-            </a>
-          </div>
-        </div>
-
-        <h2 className="text-sm text-text-secondary mb-3">
-          {bio ? "Edit your profile" : "Create your profile"}
-        </h2>
-        <p className="text-xs text-text-secondary mb-4">
-          A profile is a permanent signal — it never expires and shows up in search
-          exactly like any other signal, pinned above your live posts on your Human
-          Card.
-        </p>
+    <main className="min-h-screen">
+      <AppHeader persona={persona} />
+      <div className="w-full max-w-lg mx-auto px-4 py-8">
+        <PageHeading
+          title={bio ? "Edit Profile" : "Create Profile"}
+          subtitle="A profile is a permanent signal — it never expires and shows up in search exactly like any other signal, pinned above your live posts on your Human Card."
+        />
 
         <form onSubmit={save} className="card-base p-4 space-y-4">
           <div>

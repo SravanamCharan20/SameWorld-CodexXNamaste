@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { Compass, Pencil, Sparkles, ExternalLink, UserX, Radio } from "lucide-react";
+import { Pencil, Sparkles, ExternalLink, UserX, Radio } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { getStoredPersona } from "@/lib/persona";
 import { Signal } from "@/lib/types";
 import ConnectButton from "@/components/ConnectButton";
+import AppHeader from "@/components/AppHeader";
+import PageHeading from "@/components/PageHeading";
 
 type PersonaInfo = {
   id: string;
@@ -34,7 +36,8 @@ export default function HumanCardPage() {
   const [profileChecked, setProfileChecked] = useState(false);
   const [liveSignals, setLiveSignals] = useState<Signal[] | null>(null);
   const [notFound, setNotFound] = useState(false);
-  const isOwnCard = getStoredPersona()?.id === personaId;
+  const viewerPersona = getStoredPersona();
+  const isOwnCard = viewerPersona?.id === personaId;
 
   useEffect(() => {
     async function load() {
@@ -78,41 +81,40 @@ export default function HumanCardPage() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-12">
-      <div className="w-full max-w-lg mx-auto">
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="font-heading font-bold text-xl tracking-tight">
+    <main className="min-h-screen">
+      {viewerPersona ? (
+        <AppHeader persona={viewerPersona} active={isOwnCard ? "card" : undefined} />
+      ) : (
+        <div className="relative z-10 flex items-center justify-between px-6 py-4">
+          <h1 className="font-heading font-bold text-lg tracking-tight">
             SAME<span className="text-ai-match">WORLD</span>
           </h1>
-          <a href="/explore" className="link-muted flex items-center gap-1.5">
-            <Compass size={13} />
-            explore
+          <a href="/login" className="link-muted">
+            log in
           </a>
         </div>
-
-        <div className="mb-6">
-          <h2 className="text-lg font-heading font-bold text-text-primary">
-            {persona.display_name}
-          </h2>
-          <p className="text-sm text-text-secondary font-mono">
-            {persona.region_label}
-            {persona.is_demo && " · demo persona"}
-          </p>
-          {isOwnCard && (
-            <a href="/profile/edit" className="link-muted hover:!text-ai-match inline-flex items-center gap-1 mt-2">
-              <Pencil size={12} />
-              edit profile
-            </a>
-          )}
-        </div>
+      )}
+      <div className="w-full max-w-lg mx-auto px-4 py-8">
+        <PageHeading
+          title={persona.display_name}
+          subtitle={`${persona.region_label}${persona.is_demo ? " · demo persona" : ""}`}
+          action={
+            isOwnCard ? (
+              <a href="/profile/edit" className="btn-chip">
+                <Pencil size={12} />
+                edit profile
+              </a>
+            ) : undefined
+          }
+        />
 
         {profile && (
           <div className="card-base border-ai-match/40 p-5 mb-8 relative">
-            <span className="absolute top-4 right-4 text-xs font-mono text-ai-match flex items-center gap-1">
+            <span className="badge-profile absolute top-4 right-4">
               <Sparkles size={11} />
               PROFILE
             </span>
-            <p className="text-sm text-text-primary mb-3 pr-20">{profile.raw_text}</p>
+            <p className="text-sm text-text-primary mb-3 pr-24">{profile.raw_text}</p>
             {profile.tags.length > 0 && (
               <div className="flex gap-1 flex-wrap mb-3">
                 {profile.tags.map((t) => (
@@ -179,13 +181,9 @@ export default function HumanCardPage() {
           {liveSignals?.map((s) => (
             <div key={s.id} className="card-base p-4">
               <div className="flex items-center gap-2 mb-2">
-                <span
-                  className={`h-2 w-2 rounded-full ${
-                    s.kind === "NOW" ? "bg-now" : "bg-open"
-                  }`}
-                />
-                <span className="text-xs font-mono text-text-secondary">
-                  {s.kind} · {INTENT_LABELS[s.intent] ?? s.intent}
+                <span className={s.kind === "NOW" ? "badge-now" : "badge-open"}>{s.kind}</span>
+                <span className="text-xs text-text-secondary">
+                  {INTENT_LABELS[s.intent] ?? s.intent}
                 </span>
               </div>
               <p className="text-sm text-text-primary mb-2">{s.raw_text}</p>
