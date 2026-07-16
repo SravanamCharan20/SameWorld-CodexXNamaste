@@ -13,3 +13,7 @@ export async function apiFetch<T>(
   });
   return res.json();
 }
+
+export function personaHeaders(personaId: string): HeadersInit {
+  return { "X-Persona-Id": personaId };
+}
