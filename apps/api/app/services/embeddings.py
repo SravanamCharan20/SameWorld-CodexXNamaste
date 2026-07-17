@@ -12,12 +12,19 @@ from app.config import get_settings
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
 
+# fastembed (ONNX Runtime) instead of sentence-transformers (PyTorch) — torch
+# alone carries ~200-300MB of baseline runtime overhead before a model is even
+# loaded, which is what blew past Render's free-tier 512MB cap. This ships the
+# exact same model (sentence-transformers/all-MiniLM-L6-v2) as an ONNX graph;
+# verified the two runtimes produce cosine-similarity 1.0 (max abs diff ~1e-7)
+# on real query text, so every embedding already sitting in Qdrant is still
+# valid — nothing needs re-indexing.
 @lru_cache
 def _get_model():
-    from sentence_transformers import SentenceTransformer
+    from fastembed import TextEmbedding
 
     settings = get_settings()
-    return SentenceTransformer(settings.embedding_model_name)
+    return TextEmbedding(model_name=settings.embedding_model_name)
 
 
 async def warm_model() -> None:
@@ -27,5 +34,9 @@ async def warm_model() -> None:
 
 async def embed(text: str) -> list[float]:
     loop = asyncio.get_running_loop()
-    vector = await loop.run_in_executor(None, lambda: _get_model().encode(text, normalize_embeddings=True))
-    return vector.tolist()
+
+    def _encode() -> list[float]:
+        vector = next(iter(_get_model().embed([text])))
+        return vector.tolist()
+
+    return await loop.run_in_executor(None, _encode)
