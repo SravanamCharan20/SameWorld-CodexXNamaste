@@ -10,8 +10,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Bake the embedding model into the image at build time instead of
 # downloading it on first request — fast, predictable cold starts, and no
-# runtime dependency on Hugging Face Hub being reachable.
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')"
+# runtime dependency on Hugging Face Hub being reachable. Cached under /app
+# (not /tmp) — some platforms (Render confirmed) remount /tmp as fresh
+# ephemeral scratch space at container start, which silently wipes anything
+# written there during the build. embeddings.py reads this same env var, so
+# build-time and run-time always agree on the path.
+ENV FASTEMBED_CACHE_DIR=/app/.fastembed_cache
+RUN python -c "from fastembed import TextEmbedding; import os; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2', cache_dir=os.environ['FASTEMBED_CACHE_DIR'])"
 
 COPY . .
 

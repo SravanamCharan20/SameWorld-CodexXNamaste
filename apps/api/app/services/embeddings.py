@@ -11,6 +11,16 @@ from app.config import get_settings
 # piling up concurrently starves the executor for everything else.
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
 
+# Some container platforms (Render confirmed) mount /tmp as fresh ephemeral
+# scratch space at container *start*, separate from whatever the Docker image
+# baked in at *build* time — fastembed's default cache_dir falls under /tmp,
+# so a model pre-downloaded during `docker build` was silently gone before
+# the app ever booted, and startup crashed trying to reach the network for it
+# (with HF_HUB_OFFLINE=1, that download can't fall back either). Pinning an
+# explicit cache_dir under /app keeps build-time and run-time pointed at the
+# exact same path, which actually persists as part of the image.
+FASTEMBED_CACHE_DIR = os.environ.get("FASTEMBED_CACHE_DIR", os.path.join(os.getcwd(), ".fastembed_cache"))
+
 
 # fastembed (ONNX Runtime) instead of sentence-transformers (PyTorch) — torch
 # alone carries ~200-300MB of baseline runtime overhead before a model is even
@@ -24,7 +34,7 @@ def _get_model():
     from fastembed import TextEmbedding
 
     settings = get_settings()
-    return TextEmbedding(model_name=settings.embedding_model_name)
+    return TextEmbedding(model_name=settings.embedding_model_name, cache_dir=FASTEMBED_CACHE_DIR)
 
 
 async def warm_model() -> None:
