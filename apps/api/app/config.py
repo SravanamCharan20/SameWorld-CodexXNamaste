@@ -1,6 +1,5 @@
 from functools import lru_cache
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,17 +30,25 @@ class Settings(BaseSettings):
     # on why 0.45, not the naive dissimilar-max formula output.
     similarity_threshold: float = 0.45
 
-    cors_origins: list[str] = ["http://localhost:3000"]
+    # Deployed frontend baked in as a default so CORS works out of the box
+    # even if CORS_ORIGINS never gets set on the host. Kept as a plain str
+    # (not list[str]): pydantic-settings JSON-decodes env values for list
+    # fields *before* any validator runs, so a plain comma-separated env var
+    # (the natural format for a dashboard text field) crashes at startup
+    # with a SettingsError instead of being parsed — a str field sidesteps
+    # that entirely. See cors_origins_list below for the parsed form.
+    cors_origins: str = (
+        "http://localhost:3000,https://same-world-codex-x-namaste.vercel.app"
+    )
 
-    @field_validator("cors_origins", mode="before")
-    @classmethod
-    def _parse_cors_origins(cls, v):
-        # Deploy dashboards (Render, HF Spaces) make a plain comma-separated
-        # string much less fiddly to type into an env var field than a
-        # JSON-array literal — accept both instead of forcing JSON syntax.
-        if isinstance(v, str) and not v.strip().startswith("["):
-            return [origin.strip() for origin in v.split(",") if origin.strip()]
-        return v
+    @property
+    def cors_origins_list(self) -> list[str]:
+        raw = self.cors_origins.strip()
+        if raw.startswith("["):
+            import json
+
+            return json.loads(raw)
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
 
 
 @lru_cache
