@@ -14,7 +14,6 @@ type PersonaInfo = {
   id: string;
   display_name: string;
   region_label: string;
-  is_demo: boolean;
 };
 
 const INTENT_LABELS: Record<string, string> = {
@@ -97,7 +96,7 @@ export default function HumanCardPage() {
       <div className="w-full max-w-lg mx-auto px-4 py-8">
         <PageHeading
           title={persona.display_name}
-          subtitle={`${persona.region_label}${persona.is_demo ? " · demo persona" : ""}`}
+          subtitle={persona.region_label}
           action={
             isOwnCard ? (
               <a href="/profile/edit" className="btn-chip">

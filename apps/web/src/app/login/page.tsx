@@ -63,8 +63,7 @@ export default function LoginPage() {
             SAME<span className="text-ai-match">WORLD</span>
           </h1>
           <p className="mt-2 text-sm text-text-secondary">
-            Pick a persona to explore as — this is a hackathon demo, not real
-            authentication.
+            Choose a profile to continue.
           </p>
         </div>
 
@@ -101,10 +100,6 @@ export default function LoginPage() {
             </button>
           ))}
         </div>
-
-        <p className="mt-4 text-center text-xs text-text-secondary font-mono">
-          demo personas — is_demo: true
-        </p>
       </div>
     </main>
   );

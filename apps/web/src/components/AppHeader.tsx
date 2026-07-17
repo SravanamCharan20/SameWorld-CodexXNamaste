@@ -6,14 +6,15 @@ import { Compass, Radio, UserCircle2, Users, LogOut, MapPin, LucideIcon } from "
 import { clearPersona, Persona } from "@/lib/persona";
 import HelpButton from "@/components/HelpButton";
 
-// No timezone database on hand for demo personas — longitude/15 is the
-// standard rough-timezone approximation (each 15° of longitude is ~1 hour of
-// solar time), close enough to make the globe feel grounded in an actual
-// time of day at the viewer's own location without needing a real TZ lookup.
+// No timezone database on hand — longitude/15 is the standard rough-timezone
+// approximation (each 15° of longitude is ~1 hour of solar time). Rounded to
+// the nearest half hour rather than a whole hour: several real timezones sit
+// on a :30 offset (India, Iran, most of Sri Lanka), and whole-hour rounding
+// was silently off by up to 30 minutes for exactly those regions.
 function approxLocalTime(lng: number): Date {
   const now = new Date();
   const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
-  const offsetHours = Math.round(lng / 15);
+  const offsetHours = Math.round((lng / 15) * 2) / 2;
   return new Date(utcMs + offsetHours * 3600000);
 }
 
@@ -74,7 +75,7 @@ export default function AppHeader({ persona, active }: { persona: Persona; activ
           <button
             onClick={logout}
             className="nav-pill"
-            title="Log out of this demo persona and pick another one"
+            title="Log out and choose a different profile"
           >
             <LogOut size={13} />
             <span className="hidden md:inline">switch persona</span>
