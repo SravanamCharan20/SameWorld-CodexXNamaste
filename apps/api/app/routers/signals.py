@@ -1,4 +1,5 @@
 import asyncio
+import re
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -146,7 +147,10 @@ async def browse_signals(
     db = get_db()
     query: dict = {"status": "active"}
     if region:
-        query["region_label"] = region
+        # Substring, case-insensitive — a viewer typing "india" should match
+        # "Gurgaon, India" without needing the exact stored label. re.escape
+        # guards against the input being interpreted as a regex itself.
+        query["region_label"] = {"$regex": re.escape(region), "$options": "i"}
     if tag:
         query["tags"] = tag
     if owner_id:

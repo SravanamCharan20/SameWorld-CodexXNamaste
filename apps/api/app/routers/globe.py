@@ -1,3 +1,5 @@
+import re
+
 from fastapi import APIRouter
 
 from app.db.mongo import get_db
@@ -45,7 +47,7 @@ async def activity_recent(limit: int = 8, region: str | None = None):
     db = get_db()
     query: dict = {"status": {"$in": ["active", "resolved"]}}
     if region:
-        query["region_label"] = region
+        query["region_label"] = {"$regex": re.escape(region), "$options": "i"}
     cursor = db.signals.find(query).sort("created_at", -1).limit(limit)
     items = [
         {
