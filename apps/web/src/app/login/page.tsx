@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Persona, storePersona } from "@/lib/persona";
+import ColdStartLoader from "@/components/ColdStartLoader";
 
 // The demo seeds 160+ personas so search/browse has real variety, but a
 // 160-row picker is more than anyone needs to choose an identity from.
@@ -71,14 +72,13 @@ export default function LoginPage() {
           <p className="mb-4 text-sm text-red-400 font-mono text-center">{error}</p>
         )}
 
-        <div className="card-base divide-y divide-border">
-          {personas === null && (
-            <div className="p-3 space-y-2">
-              {[0, 1, 2, 3].map((i) => (
-                <div key={i} className="skeleton h-[52px] w-full" />
-              ))}
-            </div>
-          )}
+        {personas === null && !error && (
+          <div className="card-base">
+            <ColdStartLoader />
+          </div>
+        )}
+
+        <div className={personas === null ? "hidden" : "card-base divide-y divide-border"}>
           {personas?.map((p) => (
             <button
               key={p.id}

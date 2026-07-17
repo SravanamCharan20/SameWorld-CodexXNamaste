@@ -1,5 +1,8 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "http://localhost:8000";
-const TIMEOUT_MS = 30000;
+// Generous enough to cover a cold start on the free-tier host (idle instances
+// can take 30-50s to wake on the very first request after a period of no
+// traffic) without giving up and showing an error while it's still booting.
+const TIMEOUT_MS = 50000;
 
 export type Envelope<T> = { data: T | null; error: string | null };
 
@@ -40,9 +43,9 @@ export async function apiFetch<T>(
     return { data: body as T, error: null };
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
-      return { data: null, error: "Request timed out. Is the backend running?" };
+      return { data: null, error: "This is taking longer than expected. Please try again in a moment." };
     }
-    return { data: null, error: "Could not reach the server. Is the backend running?" };
+    return { data: null, error: "Couldn't reach SameWorld right now. Please try again in a moment." };
   } finally {
     clearTimeout(timeout);
   }
