@@ -429,12 +429,13 @@ export default function GlobeCanvas({
       ringPropagationSpeed={highlightedIds.size > 0 ? 2 : 1}
       ringRepeatPeriod={highlightedIds.size > 0 ? 1200 : 2600}
       arcsData={arcsData}
-      arcColor={() => AI_MATCH_COLOR}
+      arcColor={() => [AI_MATCH_COLOR, "#E0E7FF"]}
       arcAltitude={0.25}
-      arcStroke={0.4}
-      arcDashLength={0.4}
-      arcDashGap={0.2}
-      arcDashAnimateTime={2000}
+      arcStroke={0.45}
+      arcCurveResolution={128}
+      arcDashLength={0.15}
+      arcDashGap={0.06}
+      arcDashAnimateTime={1600}
       showGraticules={false}
       width={typeof window !== "undefined" ? window.innerWidth : undefined}
       height={typeof window !== "undefined" ? window.innerHeight : undefined}

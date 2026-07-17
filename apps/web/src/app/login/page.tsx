@@ -6,17 +6,25 @@ import { ArrowRight, Loader2 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { Persona, storePersona } from "@/lib/persona";
 
-const PICKER_SIZE = 6;
+// The demo seeds 160+ personas so search/browse has real variety, but a
+// 160-row picker is more than anyone needs to choose an identity from.
+// Picking evenly by alphabetical index (the previous approach) produced an
+// accidentally Europe/UK-heavy set, since alphabetical order has nothing to
+// do with geography — this is a hand-picked spread across six actually
+// distinct continents/regions instead.
+const PICKER_IDS = [
+  "persona_seed_025", // Simran — Gurgaon, India (South Asia)
+  "persona_profile_013", // Bianca — Sao Paulo, Brazil (South America)
+  "persona_profile_009", // Naledi — Cape Town, South Africa (Africa)
+  "persona_profile_006", // Diego — Mexico City, Mexico (Latin America)
+  "persona_profile_004", // Jonas — Stockholm, Sweden (Northern Europe)
+  "persona_seed_094", // Harper — Melbourne, Australia (Oceania)
+];
 
-// The demo seeds ~20 personas so search/browse has real variety, but a
-// 20-row picker is more than anyone needs to choose an identity from — 6,
-// spread evenly across the (alphabetically, so region-varied) sorted list
-// rather than just the first 6, keeps the picker short without collapsing
-// it to a handful of near-identical names.
-function pickSpread<T>(items: T[], count: number): T[] {
-  if (items.length <= count) return items;
-  const step = items.length / count;
-  return Array.from({ length: count }, (_, i) => items[Math.floor(i * step)]);
+function pickCurated<T extends { id: string }>(items: T[]): T[] {
+  const byId = new Map(items.map((p) => [p.id, p]));
+  const picked = PICKER_IDS.map((id) => byId.get(id)).filter((p): p is T => !!p);
+  return picked.length > 0 ? picked : items.slice(0, 6);
 }
 
 export default function LoginPage() {
@@ -27,7 +35,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     apiFetch<Persona[]>("/personas").then((res) => {
-      if (res.data) setPersonas(pickSpread(res.data, PICKER_SIZE));
+      if (res.data) setPersonas(pickCurated(res.data));
       else setError(res.error ?? "Could not load personas");
     });
   }, []);
