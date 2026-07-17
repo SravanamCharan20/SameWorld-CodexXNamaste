@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -31,6 +32,16 @@ class Settings(BaseSettings):
     similarity_threshold: float = 0.45
 
     cors_origins: list[str] = ["http://localhost:3000"]
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v):
+        # Deploy dashboards (Render, HF Spaces) make a plain comma-separated
+        # string much less fiddly to type into an env var field than a
+        # JSON-array literal — accept both instead of forcing JSON syntax.
+        if isinstance(v, str) and not v.strip().startswith("["):
+            return [origin.strip() for origin in v.split(",") if origin.strip()]
+        return v
 
 
 @lru_cache

@@ -421,7 +421,7 @@ export default function GlobeCanvas({
       ringsData={ringsData}
       ringLat="lat"
       ringLng="lng"
-      ringColor={(d) => {
+      ringColor={(d: object) => {
         const r = d as { color: string };
         return (t: number) => hexToRgba(r.color, 1 - t);
       }}

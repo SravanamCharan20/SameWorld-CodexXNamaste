@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X, MapPinned, SearchX, Sparkles, Radio } from "lucide-react";
 import { apiFetch } from "@/lib/api";
@@ -32,7 +32,18 @@ const INTENT_LABELS: Record<string, string> = {
   other: "something",
 };
 
+// useSearchParams() opts a page out of static prerendering unless it's
+// wrapped in Suspense — the actual page logic lives in ExplorePageInner so
+// the default export can provide that boundary.
 export default function ExplorePage() {
+  return (
+    <Suspense fallback={null}>
+      <ExplorePageInner />
+    </Suspense>
+  );
+}
+
+function ExplorePageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const autoSearchedRef = useRef(false);
