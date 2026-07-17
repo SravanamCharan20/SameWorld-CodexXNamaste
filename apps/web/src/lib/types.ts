@@ -80,27 +80,6 @@ export type NarrateResponse = {
   citations: NarrateCitation[];
 };
 
-export type PulseResponse = {
-  headline: string;
-};
-
-export type ResonanceSide = {
-  signal_id: string;
-  owner_id: string;
-  display_name: string;
-  region_label: string;
-  lat: number;
-  lng: number;
-  raw_text: string;
-};
-
-export type ResonanceResponse = {
-  a: ResonanceSide;
-  b: ResonanceSide;
-  score: number;
-  note: string | null;
-};
-
 export type GlobePoint = {
   id: string;
   owner_id: string;

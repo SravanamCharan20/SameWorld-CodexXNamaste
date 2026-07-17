@@ -54,29 +54,6 @@ async def delete_signal_point(point_id: str) -> None:
     )
 
 
-async def sample_active_points(limit: int = 60) -> list[models.Record]:
-    """Used for Resonance — pulls a batch of active signal vectors so a
-    best cross-owner pair can be found by direct cosine comparison, without
-    re-embedding anything (the vectors already exist from indexing)."""
-    settings = get_settings()
-    client = get_qdrant_client()
-    points, _ = await client.scroll(
-        collection_name=settings.qdrant_collection,
-        limit=limit,
-        with_payload=True,
-        with_vectors=True,
-        scroll_filter=models.Filter(
-            must=[models.FieldCondition(key="status", match=models.MatchValue(value="active"))],
-            must_not=[
-                models.FieldCondition(
-                    key="contact_intent", match=models.MatchValue(value="just_sharing")
-                )
-            ],
-        ),
-    )
-    return points
-
-
 async def search_candidates(vector: list[float], limit: int = 30) -> list[models.ScoredPoint]:
     settings = get_settings()
     client = get_qdrant_client()

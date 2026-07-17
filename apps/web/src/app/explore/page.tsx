@@ -3,17 +3,10 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Search, X, MapPinned, SearchX, Sparkles, Radio, Zap } from "lucide-react";
+import { Search, X, MapPinned, SearchX, Sparkles, Radio } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { getStoredPersona, Persona } from "@/lib/persona";
-import {
-  GlobePoint,
-  NarrateResponse,
-  PulseResponse,
-  ResonanceResponse,
-  SearchResponse,
-  SearchResult,
-} from "@/lib/types";
+import { GlobePoint, NarrateResponse, SearchResponse, SearchResult } from "@/lib/types";
 import ConnectButton from "@/components/ConnectButton";
 import AppHeader from "@/components/AppHeader";
 import Avatar from "@/components/Avatar";
@@ -61,9 +54,7 @@ export default function ExplorePage() {
 
   const [selectedPoint, setSelectedPoint] = useState<{ point: GlobePoint; x: number; y: number } | null>(null);
 
-  const [pulse, setPulse] = useState<PulseResponse | null>(null);
-  const [resonance, setResonance] = useState<ResonanceResponse | null>(null);
-  const [resonanceDismissed, setResonanceDismissed] = useState(false);
+  const [tickerIndex, setTickerIndex] = useState(0);
 
   useEffect(() => {
     const stored = getStoredPersona();
@@ -84,45 +75,23 @@ export default function ExplorePage() {
     return () => clearInterval(interval);
   }, []);
 
-  // World Pulse — a single live headline for the whole globe, cached and
-  // shared server-side so every viewer sees the same read at once.
-  useEffect(() => {
-    async function loadPulse() {
-      const res = await apiFetch<PulseResponse | null>("/pulse");
-      if (res.data) setPulse(res.data);
-    }
-    loadPulse();
-    const interval = setInterval(loadPulse, 60000);
-    return () => clearInterval(interval);
-  }, []);
+  // Live Activity — a rotating ticker over the most recently posted signals,
+  // computed entirely from the globe state already being polled (no extra
+  // API call, no AI dependency — just what's actually new right now).
+  const recentActivity = useMemo(() => {
+    return [...points]
+      .filter((p) => !p.is_profile && p.created_at)
+      .sort((a, b) => new Date(b.created_at!).getTime() - new Date(a.created_at!).getTime())
+      .slice(0, 10);
+  }, [points]);
 
-  // Resonance — an AI-found striking match between two unrelated people's
-  // signals, drawn as its own gold arc independent of any search.
   useEffect(() => {
-    async function loadResonance() {
-      const res = await apiFetch<ResonanceResponse | null>("/resonance");
-      if (res.data) {
-        setResonance((prev) => {
-          const isNew = !prev || prev.a.signal_id !== res.data!.a.signal_id || prev.b.signal_id !== res.data!.b.signal_id;
-          if (isNew) setResonanceDismissed(false);
-          return res.data;
-        });
-      }
-    }
-    loadResonance();
-    const interval = setInterval(loadResonance, 300000);
+    if (recentActivity.length < 2) return;
+    const interval = setInterval(() => setTickerIndex((i) => i + 1), 4000);
     return () => clearInterval(interval);
-  }, []);
+  }, [recentActivity.length]);
 
-  const resonanceArc = useMemo(() => {
-    if (!resonance || resonanceDismissed) return null;
-    return {
-      startLat: resonance.a.lat,
-      startLng: resonance.a.lng,
-      endLat: resonance.b.lat,
-      endLng: resonance.b.lng,
-    };
-  }, [resonance, resonanceDismissed]);
+  const currentActivity = recentActivity.length > 0 ? recentActivity[tickerIndex % recentActivity.length] : null;
 
   const highlightedIds = useMemo(() => {
     if (!searchResponse || searchResponse.empty) return new Set<string>();
@@ -284,7 +253,6 @@ export default function ExplorePage() {
           focusTarget={focusTarget}
           origin={{ lat: persona.region_lat, lng: persona.region_lng }}
           ownPersonaId={persona.id}
-          resonanceArc={resonanceArc}
           onPointClick={handlePointClick}
           onClusterClick={handleClusterClick}
         />
@@ -292,52 +260,31 @@ export default function ExplorePage() {
 
       <AppHeader persona={persona} active="explore" />
 
-      {/* World Pulse — one live headline generated from a sample of what's
-          actually happening across the globe right now, shared by everyone
-          viewing at once. */}
-      {pulse && !resultsPanelOpen && (
+      {/* Live Activity — a rotating ticker over the most recently posted
+          signals. Phrased as an actual sentence (not just "region · topic",
+          which read as a meaningless fragment) so it's legible at a glance. */}
+      {currentActivity && !resultsPanelOpen && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-10 w-[92%] max-w-xl px-4">
-          <div className="flex items-center gap-2.5 bg-surface/85 backdrop-blur-xl border border-ai-match/25 rounded-pill px-4 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.35)]">
-            <Radio size={13} className="text-ai-match shrink-0 animate-pulse" />
-            <span className="text-[10px] font-mono font-semibold text-ai-match uppercase tracking-wide shrink-0">
-              World Pulse
-            </span>
-            <span className="text-xs text-text-primary truncate">{pulse.headline}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Resonance — an AI-found striking match between two unrelated
-          people's signals on opposite sides of the world, shown as its own
-          gold arc on the globe regardless of any active search. */}
-      {resonance && !resonanceDismissed && (
-        <div className="fixed bottom-24 left-4 sm:left-6 z-10 w-[calc(100%-2rem)] sm:w-80">
-          <div className="card-base !border-open/30 bg-gradient-to-br from-open/[0.08] to-transparent p-4 relative">
-            <button
-              onClick={() => setResonanceDismissed(true)}
-              aria-label="Dismiss resonance"
-              className="absolute top-2.5 right-2.5 h-5 w-5 rounded-full flex items-center justify-center text-text-secondary cursor-pointer hover:text-text-primary hover:bg-white/[0.07] transition-colors duration-micro"
+          <div
+            className={`flex items-center gap-2.5 bg-surface/85 backdrop-blur-xl border rounded-pill px-4 py-2.5 shadow-[0_8px_30px_rgba(0,0,0,0.35)] ${
+              currentActivity.kind === "NOW" ? "border-now/30" : "border-open/30"
+            }`}
+          >
+            <Radio
+              size={13}
+              className={`shrink-0 ${currentActivity.kind === "NOW" ? "text-now" : "text-open"}`}
+            />
+            <span
+              className={`text-[10px] font-mono font-semibold uppercase tracking-wide shrink-0 ${
+                currentActivity.kind === "NOW" ? "text-now" : "text-open"
+              }`}
             >
-              <X size={12} />
-            </button>
-            <div className="flex items-center gap-1.5 mb-2.5">
-              <Zap size={13} className="text-open" />
-              <span className="text-[10px] font-mono font-semibold text-open uppercase tracking-wide">
-                Resonance
-              </span>
-            </div>
-            <p className="text-xs text-text-secondary mb-2">
-              <span className="text-text-primary font-medium">{resonance.a.display_name}</span>
-              <span className="mx-1">·</span>
-              {resonance.a.region_label}
-              <span className="mx-1.5 text-open">⟷</span>
-              <span className="text-text-primary font-medium">{resonance.b.display_name}</span>
-              <span className="mx-1">·</span>
-              {resonance.b.region_label}
-            </p>
-            {resonance.note && (
-              <p className="text-sm text-text-primary leading-relaxed">{resonance.note}</p>
-            )}
+              Live
+            </span>
+            <span key={currentActivity.id} className="text-xs text-text-primary truncate animate-ticker-fade">
+              {currentActivity.kind === "NOW" ? "Happening now in" : "Ongoing in"}{" "}
+              {currentActivity.region_label} — {currentActivity.topic}
+            </span>
           </div>
         </div>
       )}

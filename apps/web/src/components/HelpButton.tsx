@@ -9,7 +9,6 @@ import {
   MapPinned,
   Sparkles,
   Radio,
-  Zap,
   MessageCircle,
   UserCircle,
 } from "lucide-react";
@@ -24,8 +23,7 @@ const FEATURES = [
   { icon: Globe2, name: "The Globe", blurb: "Every active signal shows up live as a pin, anywhere in the world, as it happens." },
   { icon: MapPinned, name: "Browse Nearby", blurb: "See raw signals from any region, unranked — not filtered by relevance." },
   { icon: Sparkles, name: "Ask the World", blurb: "AI reads your top matches and writes one answer, citing exactly who it drew from." },
-  { icon: Radio, name: "World Pulse", blurb: "A live AI headline of what's happening across the globe, refreshed every minute." },
-  { icon: Zap, name: "Resonance", blurb: "AI finds two strangers whose signals strikingly match and explains why — every 5 min." },
+  { icon: Radio, name: "Live Activity", blurb: "A rotating ticker of the newest signals appearing anywhere in the world." },
   { icon: MessageCircle, name: "Connect + Chat", blurb: "Reach out to a signal's owner (AI can suggest an opener), then chat once accepted." },
   { icon: UserCircle, name: "My Signals / Card", blurb: "Post what you need or offer, and manage the public profile others see." },
 ];

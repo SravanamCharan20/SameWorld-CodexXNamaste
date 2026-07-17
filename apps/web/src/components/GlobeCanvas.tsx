@@ -3,9 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Globe, { GlobeMethods } from "react-globe.gl";
 import * as THREE from "three";
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-import { feature } from "topojson-client";
-import landTopology from "world-atlas/land-110m.json";
 import type { GlobePoint } from "@/lib/types";
 
 const NOW_COLOR = "#22C55E";
@@ -13,18 +10,103 @@ const OPEN_COLOR = "#F5B822";
 const AI_MATCH_COLOR = "#818CF8";
 const MINE_COLOR = "#A78BFA";
 const DIM_COLOR = "#3a3d4a";
-const GOLD_COLOR = "#F5B822";
 
-type LandFeature = {
-  type: "Feature";
-  properties: Record<string, unknown>;
-  geometry: { type: string; coordinates: unknown };
+// The subsolar point (where the sun is directly overhead right now) — a
+// standard low-precision solar-position approximation (accurate to ~1°),
+// plenty for a visual effect rather than real navigation.
+function getSubsolarPoint(date: Date): { lat: number; lng: number } {
+  const startOfYear = Date.UTC(date.getUTCFullYear(), 0, 0);
+  const dayOfYear = Math.floor((date.getTime() - startOfYear) / 86400000);
+  const declination = -23.44 * Math.cos(((2 * Math.PI) / 365) * (dayOfYear + 10));
+  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+  const rawLng = (12 - utcHours) * 15;
+  const lng = ((rawLng + 180) % 360 + 360) % 360 - 180;
+  return { lat: declination, lng };
+}
+
+// Ported directly from globe.gl's own reference implementation
+// (https://globe.gl/example/day-night-cycle/) — the day/night blend lives in
+// the globe's own shader, driven purely by real sun position, rather than
+// depending on scene lights the way MeshPhongMaterial + a DirectionalLight
+// does. That's what gives a genuinely sharp, accurate terminator instead of
+// a soft Lambertian falloff, and it's completely decoupled from every other
+// layer in the scene (nothing else needs to compromise for its sake).
+const DAY_NIGHT_SHADER = {
+  vertexShader: `
+    varying vec3 vNormal;
+    varying vec2 vUv;
+    void main() {
+      vNormal = normalize(normalMatrix * normal);
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: `
+    #define PI 3.141592653589793
+    uniform sampler2D dayTexture;
+    uniform sampler2D nightTexture;
+    uniform vec2 sunPosition;
+    uniform vec2 globeRotation;
+    varying vec3 vNormal;
+    varying vec2 vUv;
+
+    float toRad(in float a) {
+      return a * PI / 180.0;
+    }
+
+    vec3 Polar2Cartesian(in vec2 c) { // [lng, lat]
+      float theta = toRad(90.0 - c.x);
+      float phi = toRad(90.0 - c.y);
+      return vec3(
+        sin(phi) * cos(theta),
+        cos(phi),
+        sin(phi) * sin(theta)
+      );
+    }
+
+    void main() {
+      float invLon = toRad(globeRotation.x);
+      float invLat = -toRad(globeRotation.y);
+      mat3 rotX = mat3(
+        1, 0, 0,
+        0, cos(invLat), -sin(invLat),
+        0, sin(invLat), cos(invLat)
+      );
+      mat3 rotY = mat3(
+        cos(invLon), 0, sin(invLon),
+        0, 1, 0,
+        -sin(invLon), 0, cos(invLon)
+      );
+      vec3 rotatedSunDirection = rotX * rotY * Polar2Cartesian(sunPosition);
+      float intensity = dot(normalize(vNormal), normalize(rotatedSunDirection));
+      vec4 dayColor = texture2D(dayTexture, vUv);
+      vec4 nightColor = texture2D(nightTexture, vUv);
+      float blendFactor = smoothstep(-0.1, 0.1, intensity);
+      gl_FragColor = mix(nightColor, dayColor, blendFactor);
+    }
+  `,
 };
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const topo = landTopology as any;
-const landFeatures = (feature(topo, topo.objects.land) as unknown as { features: LandFeature[] })
-  .features;
+// Soft radial-glow sprite texture, generated once via canvas — replaces the
+// old solid 3D "pushpin" cylinders. Sprites always face the camera and are
+// fully unlit, so signals read as clean glowing beacons against real
+// satellite imagery and stay visible on both the day and night side without
+// any scene lighting dependency at all.
+function createGlowTexture(): THREE.Texture {
+  const size = 128;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(255,255,255,1)");
+  gradient.addColorStop(0.25, "rgba(255,255,255,0.85)");
+  gradient.addColorStop(0.55, "rgba(255,255,255,0.22)");
+  gradient.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  return new THREE.CanvasTexture(canvas);
+}
 
 export type GlobeCanvasProps = {
   points: GlobePoint[];
@@ -33,7 +115,6 @@ export type GlobeCanvasProps = {
   focusTarget: { lat: number; lng: number } | null;
   origin?: { lat: number; lng: number } | null;
   ownPersonaId?: string;
-  resonanceArc?: { startLat: number; startLng: number; endLat: number; endLng: number } | null;
   onPointClick?: (point: GlobePoint, event: MouseEvent) => void;
   onClusterClick?: (regionLabel: string, event: MouseEvent) => void;
 };
@@ -89,9 +170,9 @@ function clusterPoints(
   return { solo, clusters };
 }
 
-type RenderPoint =
-  | (GlobePoint & { variant: "halo" | "core"; dimmed: boolean; highlighted: boolean; mine: boolean })
-  | (ClusterMarker & { variant: "cluster" });
+type ObjectDatum =
+  | (GlobePoint & { objType: "point"; dimmed: boolean; highlighted: boolean; mine: boolean })
+  | (ClusterMarker & { objType: "cluster" });
 
 export default function GlobeCanvas({
   points: rawPoints,
@@ -100,7 +181,6 @@ export default function GlobeCanvas({
   focusTarget,
   origin,
   ownPersonaId,
-  resonanceArc,
   onPointClick,
   onClusterClick,
 }: GlobeCanvasProps) {
@@ -109,6 +189,7 @@ export default function GlobeCanvas({
   const [pulseIds, setPulseIds] = useState<string[]>([]);
   const focusTargetRef = useRef(focusTarget);
   focusTargetRef.current = focusTarget;
+  const [liveTick, setLiveTick] = useState(0);
 
   // Clustering is skipped while a search is active — matched results need to
   // stay individually visible (and each one needs its own arc landing on it),
@@ -119,10 +200,21 @@ export default function GlobeCanvas({
     [rawPoints, highlightedIds, ownPersonaId]
   );
 
-  const globeMaterial = useMemo(
-    () => new THREE.MeshPhongMaterial({ color: "#0b0d16", shininess: 6 }),
-    []
-  );
+  const glowTexture = useMemo(() => createGlowTexture(), []);
+
+  const globeMaterial = useMemo(() => {
+    const loader = new THREE.TextureLoader();
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        dayTexture: { value: loader.load("/globe-textures/earth-blue-marble.jpg") },
+        nightTexture: { value: loader.load("/globe-textures/earth-night.jpg") },
+        sunPosition: { value: new THREE.Vector2() },
+        globeRotation: { value: new THREE.Vector2() },
+      },
+      vertexShader: DAY_NIGHT_SHADER.vertexShader,
+      fragmentShader: DAY_NIGHT_SHADER.fragmentShader,
+    });
+  }, []);
 
   useEffect(() => {
     const globe = globeRef.current;
@@ -149,6 +241,19 @@ export default function GlobeCanvas({
     globe.controls().autoRotate = !focusTarget;
   }, [focusTarget, ready]);
 
+  // Keeps the shader's sun position accurate to real time, ticking once a
+  // minute — plenty, since the sun's apparent position barely moves faster
+  // than that.
+  useEffect(() => {
+    const interval = setInterval(() => setLiveTick((t) => t + 1), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const { lat, lng } = getSubsolarPoint(new Date());
+    globeMaterial.uniforms.sunPosition.value.set(lng, lat);
+  }, [liveTick, globeMaterial]);
+
   useEffect(() => {
     if (dimmed) return;
     const interval = setInterval(() => {
@@ -159,8 +264,8 @@ export default function GlobeCanvas({
     return () => clearInterval(interval);
   }, [points, dimmed]);
 
-  const renderPoints: RenderPoint[] = useMemo(() => {
-    const out: RenderPoint[] = [];
+  const objectsLayerData: ObjectDatum[] = useMemo(() => {
+    const out: ObjectDatum[] = [];
     for (const p of points) {
       const highlighted = highlightedIds.has(p.id);
       // The permanent profile signal doesn't count as "mine" here — this
@@ -168,11 +273,10 @@ export default function GlobeCanvas({
       // always-on profile, so it actually means something when it shows up.
       const mine = !!ownPersonaId && p.owner_id === ownPersonaId && !p.is_profile;
       const isDimmed = dimmed && !highlighted && !mine;
-      out.push({ ...p, variant: "halo", dimmed: isDimmed, highlighted, mine });
-      out.push({ ...p, variant: "core", dimmed: isDimmed, highlighted, mine });
+      out.push({ ...p, objType: "point", dimmed: isDimmed, highlighted, mine });
     }
     for (const c of clusters) {
-      out.push({ ...c, variant: "cluster" });
+      out.push({ ...c, objType: "cluster" });
     }
     return out;
   }, [points, clusters, highlightedIds, dimmed, ownPersonaId]);
@@ -203,116 +307,106 @@ export default function GlobeCanvas({
 
   // Arcs represent your search reaching out across the world: they fan out
   // from your own location to every matched result, not between the
-  // (unrelated) results themselves. A resonance arc (gold) is a separate,
-  // independent overlay connecting two other people's signals — it can be
-  // visible whether or not a search is active.
+  // (unrelated) results themselves.
   const arcsData = useMemo(() => {
-    const arcs: { startLat: number; startLng: number; endLat: number; endLng: number; color: string }[] = [];
-    if (highlightedIds.size > 0 && origin) {
-      const highlighted = points.filter((p) => highlightedIds.has(p.id));
-      for (const p of highlighted) {
-        arcs.push({
-          startLat: origin.lat,
-          startLng: origin.lng,
-          endLat: p.lat,
-          endLng: p.lng,
-          color: AI_MATCH_COLOR,
-        });
-      }
-    }
-    if (resonanceArc) {
-      arcs.push({ ...resonanceArc, color: GOLD_COLOR });
-    }
-    return arcs;
-  }, [points, highlightedIds, origin, resonanceArc]);
+    if (highlightedIds.size === 0 || !origin) return [];
+    const highlighted = points.filter((p) => highlightedIds.has(p.id));
+    return highlighted.map((p) => ({
+      startLat: origin.lat,
+      startLng: origin.lng,
+      endLat: p.lat,
+      endLng: p.lng,
+    }));
+  }, [points, highlightedIds, origin]);
 
   return (
     <Globe
       ref={globeRef}
       onGlobeReady={() => setReady(true)}
       globeMaterial={globeMaterial}
-      backgroundColor="rgba(0,0,0,0)"
+      backgroundImageUrl="/globe-textures/night-sky.png"
       showAtmosphere
       atmosphereColor={AI_MATCH_COLOR}
       atmosphereAltitude={0.18}
-      polygonsData={landFeatures}
-      polygonCapColor={() => "#242840"}
-      polygonSideColor={() => "rgba(10,10,20,0.25)"}
-      polygonStrokeColor={() => "#4b5170"}
-      polygonAltitude={0.008}
-      polygonsTransitionDuration={0}
-      pointsData={renderPoints}
-      pointLat="lat"
-      pointLng="lng"
-      pointAltitude={(d) => {
-        const p = d as RenderPoint;
-        if (p.variant === "cluster") return 0.018;
-        if (p.variant !== "core") return 0.004;
-        if (p.mine) return 0.024;
-        return p.highlighted ? 0.02 : 0.012;
+      onZoom={(pov) => {
+        // Compensates the shader's sun direction for the current camera
+        // orientation every time the view rotates or zooms — straight from
+        // globe.gl's own reference implementation.
+        globeMaterial.uniforms.globeRotation.value.set(pov.lng, pov.lat);
       }}
-      pointRadius={(d) => {
-        const p = d as RenderPoint;
-        if (p.variant === "cluster") return Math.min(0.55 + Math.sqrt(p.count) * 0.22, 1.7);
-        if (p.variant === "halo") return p.mine ? 1.3 : p.highlighted ? 1.1 : 0.75;
-        return p.mine ? 0.62 : p.highlighted ? 0.55 : 0.32;
+      objectsData={objectsLayerData}
+      objectLat={(d) => (d as ObjectDatum).lat}
+      objectLng={(d) => (d as ObjectDatum).lng}
+      objectAltitude={0.012}
+      objectFacesSurfaces={false}
+      objectThreeObject={(d: object) => {
+        // A single Sprite, not a Group — three-globe wraps whatever this
+        // returns in its own Group for data-binding/raycasting, so keeping
+        // this to one object (matching the library's own default-object
+        // convention) is what makes onObjectClick/onObjectHover reliably
+        // resolve back to the right datum.
+        const datum = d as ObjectDatum;
+        let color: string;
+        let size: number;
+        let opacity = 1;
+        if (datum.objType === "cluster") {
+          color = datum.mine ? MINE_COLOR : datum.dominant === "NOW" ? NOW_COLOR : OPEN_COLOR;
+          size = Math.min(5 + Math.sqrt(datum.count) * 2.6, 13);
+        } else {
+          color = datum.mine
+            ? MINE_COLOR
+            : datum.dimmed
+            ? DIM_COLOR
+            : datum.kind === "NOW"
+            ? NOW_COLOR
+            : OPEN_COLOR;
+          size = datum.mine ? 6.5 : datum.highlighted ? 6 : 4;
+          opacity = datum.dimmed ? 0.4 : 1;
+        }
+        const sprite = new THREE.Sprite(
+          new THREE.SpriteMaterial({ map: glowTexture, color, transparent: true, depthWrite: false, opacity })
+        );
+        sprite.scale.set(size, size, 1);
+        return sprite;
       }}
-      pointColor={(d) => {
-        const p = d as RenderPoint;
-        if (p.variant === "cluster") {
-          if (p.mine) return MINE_COLOR;
-          return p.dominant === "NOW" ? NOW_COLOR : OPEN_COLOR;
-        }
-        const base = p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR;
-        if (p.mine) {
-          return p.variant === "halo" ? hexToRgba(MINE_COLOR, 0.4) : MINE_COLOR;
-        }
-        if (p.dimmed) return p.variant === "halo" ? "rgba(58,61,74,0.15)" : DIM_COLOR;
-        if (p.variant === "halo") {
-          return p.highlighted
-            ? hexToRgba(AI_MATCH_COLOR, 0.35)
-            : hexToRgba(base, 0.18);
-        }
-        return base;
-      }}
-      pointLabel={(d) => {
-        const p = d as RenderPoint;
-        if (p.variant === "cluster") {
+      objectLabel={(d) => {
+        const datum = d as ObjectDatum;
+        if (datum.objType === "cluster") {
           return `<div style="font-family: var(--font-mono, monospace); font-size: 11px; background: #17171A; border: 1px solid #26262B; border-radius: 8px; padding: 8px 10px; color: #F2F2F5; max-width: 220px;">
-            <div style="color: ${p.mine ? MINE_COLOR : "#F2F2F5"}; font-weight: 600; margin-bottom: 2px;">${p.count} signals · ${escapeHtml(p.region_label)}</div>
+            <div style="color: ${datum.mine ? MINE_COLOR : "#F2F2F5"}; font-weight: 600; margin-bottom: 2px;">${datum.count} signals · ${escapeHtml(datum.region_label)}</div>
             ${onClusterClick ? '<div style="color: #6b6c7a; font-size: 10px;">click to browse this region →</div>' : ""}
           </div>`;
         }
-        if (p.variant !== "core") return "";
         return `<div style="font-family: var(--font-mono, monospace); font-size: 11px; background: #17171A; border: 1px solid #26262B; border-radius: 8px; padding: 8px 10px; color: #F2F2F5; max-width: 220px;">
-          <div style="color: ${p.mine ? MINE_COLOR : p.kind === "NOW" ? NOW_COLOR : OPEN_COLOR}; font-weight: 600; margin-bottom: 2px;">${p.mine ? "YOU · " : ""}${p.kind} · ${p.region_label}</div>
-          <div style="color: #9A9BAA; margin-bottom: 4px;">${escapeHtml(p.topic)}</div>
+          <div style="color: ${datum.mine ? MINE_COLOR : datum.kind === "NOW" ? NOW_COLOR : OPEN_COLOR}; font-weight: 600; margin-bottom: 2px;">${datum.mine ? "YOU · " : ""}${datum.kind} · ${datum.region_label}</div>
+          <div style="color: #9A9BAA; margin-bottom: 4px;">${escapeHtml(datum.topic)}</div>
           ${onPointClick ? '<div style="color: #6b6c7a; font-size: 10px;">click to view →</div>' : ""}
         </div>`;
       }}
-      onPointClick={(d, event) => {
-        const p = d as RenderPoint;
-        if (p.variant === "cluster") {
-          onClusterClick?.(p.region_label, event);
+      onObjectClick={(d, event) => {
+        const datum = d as ObjectDatum;
+        if (datum.objType === "cluster") {
+          onClusterClick?.(datum.region_label, event);
           return;
         }
-        if (p.variant === "core" && onPointClick) onPointClick(p, event);
+        onPointClick?.(datum, event);
       }}
-      onPointHover={(d) => {
+      onObjectHover={(d) => {
         // Mutates the Three.js controls object directly (no React state) —
         // rotation pauses only while the pointer is over an actual pin and
         // resumes the instant it leaves, without a setState-during-mount
         // warning thrashing the dynamically-imported globe.
-        const p = d as RenderPoint | null;
-        const isPin = !!p && (p.variant === "core" || p.variant === "cluster");
-        const isCore = !!p && p.variant === "core" && !!onPointClick;
-        const isCluster = !!p && p.variant === "cluster" && !!onClusterClick;
+        const datum = d as ObjectDatum | null;
+        const isPin = !!datum;
+        const isClickable =
+          !!datum &&
+          ((datum.objType === "point" && !!onPointClick) || (datum.objType === "cluster" && !!onClusterClick));
         const globe = globeRef.current;
         if (globe) {
           globe.controls().autoRotate = !isPin && !focusTargetRef.current;
         }
         const canvas = globe?.renderer()?.domElement;
-        if (canvas) canvas.style.cursor = isCore || isCluster ? "pointer" : "default";
+        if (canvas) canvas.style.cursor = isClickable ? "pointer" : "default";
       }}
       labelsData={clusters}
       labelLat="lat"
@@ -320,7 +414,7 @@ export default function GlobeCanvas({
       labelText={(d) => String((d as ClusterMarker).count)}
       labelSize={1.3}
       labelColor={() => "#0e0e10"}
-      labelAltitude={0.021}
+      labelAltitude={0.016}
       labelIncludeDot={false}
       labelResolution={3}
       labelDotOrientation={() => "bottom"}
@@ -335,7 +429,7 @@ export default function GlobeCanvas({
       ringPropagationSpeed={highlightedIds.size > 0 ? 2 : 1}
       ringRepeatPeriod={highlightedIds.size > 0 ? 1200 : 2600}
       arcsData={arcsData}
-      arcColor={(d) => (d as { color: string }).color}
+      arcColor={() => AI_MATCH_COLOR}
       arcAltitude={0.25}
       arcStroke={0.4}
       arcDashLength={0.4}

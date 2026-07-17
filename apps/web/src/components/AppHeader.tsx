@@ -1,9 +1,21 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Compass, Radio, UserCircle2, Users, LogOut, MapPin, LucideIcon } from "lucide-react";
 import { clearPersona, Persona } from "@/lib/persona";
 import HelpButton from "@/components/HelpButton";
+
+// No timezone database on hand for demo personas — longitude/15 is the
+// standard rough-timezone approximation (each 15° of longitude is ~1 hour of
+// solar time), close enough to make the globe feel grounded in an actual
+// time of day at the viewer's own location without needing a real TZ lookup.
+function approxLocalTime(lng: number): Date {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const offsetHours = Math.round(lng / 15);
+  return new Date(utcMs + offsetHours * 3600000);
+}
 
 export type NavKey = "explore" | "signals" | "card" | "connections";
 
@@ -20,6 +32,13 @@ const NAV_ITEMS: { key: NavKey; href: (personaId: string) => string; icon: Lucid
 // depending which page you landed on).
 export default function AppHeader({ persona, active }: { persona: Persona; active?: NavKey }) {
   const router = useRouter();
+  const [localTime, setLocalTime] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setLocalTime(approxLocalTime(persona.region_lng));
+    const interval = setInterval(() => setLocalTime(approxLocalTime(persona.region_lng)), 30000);
+    return () => clearInterval(interval);
+  }, [persona.region_lng]);
 
   function logout() {
     clearPersona();
@@ -38,6 +57,12 @@ export default function AppHeader({ persona, active }: { persona: Persona; activ
         <span className="hidden sm:flex items-center gap-1.5 text-xs font-mono text-text-secondary whitespace-nowrap">
           <MapPin size={12} className="text-text-secondary/70" />
           {persona.display_name} · {persona.region_label}
+          {localTime && (
+            <>
+              <span className="text-text-secondary/40">·</span>
+              {localTime.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+            </>
+          )}
         </span>
         <div className="flex flex-wrap items-center gap-2">
           {NAV_ITEMS.filter((item) => item.key !== active).map(({ key, href, icon: Icon, label }) => (
